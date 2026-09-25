@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 520" role="img" aria-labelledby="title desc">
+  <title id="title">Axis Investment Consulting</title>
+  <desc id="desc">Axis Investment Consulting logo</desc>
+  <rect width="1200" height="520" fill="#fff"/>
+  <rect x="34" y="34" width="360" height="360" fill="#0799ad"/>
+  <g fill="none" stroke="#ffb82e" stroke-linecap="round" stroke-linejoin="round">
+    <path stroke-width="25" d="M61 328 224 66l72 272M124 231l251-91M124 231l174 107"/>
+  </g>
+  <text x="435" y="125" fill="#71001f" font-family="Arial,sans-serif" font-size="92" font-weight="700">Axis</text>
+  <text x="435" y="245" fill="#10104f" font-family="Arial,sans-serif" font-size="88" font-weight="700">Investment</text>
+  <text x="435" y="355" fill="#10104f" font-family="Arial,sans-serif" font-size="88" font-weight="700">Consulting</text>
+  <rect x="35" y="418" width="1130" height="8" fill="#71001f"/>
+  <text x="36" y="480" fill="#10104f" font-family="Arial,sans-serif" font-size="39" letter-spacing="1">FOR A MORE PROSPEROUS FUTURE</text>
+</svg>

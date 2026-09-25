@@ -1,0 +1,31 @@
+@import './base.css';
+
+:root { --ink: #172b4d; --muted: #6b7a90; --line: #e5eaf1; --canvas: #f5f7fb; --navy: #11243f; --teal: #0b8f83; --amber: #f4b740; }
+html, body, #app { min-height: 100%; }
+body { background: var(--canvas); color: var(--ink); }
+#app { width: 100%; }
+a { text-decoration: none; }
+.card { border-radius: 12px; }
+.table > :not(caption) > * > * { padding: .85rem 1rem; }
+.btn { border-radius: 8px; font-weight: 600; }
+.form-control, .form-select { border-color: #dce3ec; border-radius: 8px; }
+.form-control:focus, .form-select:focus { border-color: var(--teal); box-shadow: 0 0 0 .2rem rgba(11,143,131,.14); }
+.page-canvas { background: var(--canvas); min-height: 100%; }
+.metric-card { border: 1px solid var(--line); box-shadow: 0 5px 18px rgba(34, 55, 88, .05); }
+.metric-icon { width: 42px; height: 42px; display: grid; place-items: center; border-radius: 10px; }
+.eyebrow { letter-spacing: .12em; font-size: .7rem; font-weight: 800; text-transform: uppercase; color: var(--teal); }
+.auth-page { min-height: 100vh; display: grid; place-items: center; padding: 2rem 1rem; background: radial-gradient(circle at 10% 10%, #d9f0ed 0, transparent 32%), linear-gradient(135deg, #f5f7fb 0%, #e9eef6 100%); }
+.auth-panel { width: min(100%, 460px); padding: 2.5rem; background: #fff; border: 1px solid var(--line); border-radius: 18px; box-shadow: 0 22px 60px rgba(17, 36, 63, .12); }
+.auth-brand { display: flex; align-items: center; gap: .7rem; color: var(--navy); font-size: 1.35rem; letter-spacing: .08em; }
+.auth-brand small { display: block; color: var(--teal); font-size: .58rem; letter-spacing: .12em; }
+.auth-copy { margin: 2.5rem 0 1.75rem; }
+.auth-copy h1 { font-weight: 700; margin: .45rem 0 .5rem; }
+.auth-copy p { color: var(--muted); margin: 0; }
+.auth-hint { padding: .7rem .85rem; border-radius: 8px; background: #f0f8f7; color: #26736d; font-size: .8rem; }
+.auth-wordmark { display: block; width: min(100%, 340px); height: auto; border-radius: 8px; box-shadow: 0 8px 24px rgba(0,0,0,.18); }
+.recovery-wordmark { display: block; width: 250px; max-width: 100%; height: auto; border-radius: 8px; box-shadow: 0 8px 24px rgba(17,36,63,.1); }
+@media (max-width: 991.98px) {
+  .sidebar-wrapper { position: fixed !important; inset: 0 auto 0 0; z-index: 1040; transform: translateX(-100%); transition: transform .2s ease; }
+  .sidebar-wrapper.is-open { transform: translateX(0); }
+  .shell-backdrop { display: block !important; }
+}
