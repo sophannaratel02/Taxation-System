@@ -2,44 +2,70 @@ const nodemailer = require('nodemailer');
 
 const gmailUser = String(process.env.GMAIL_USER || '').trim();
 const gmailAppPassword = String(process.env.GMAIL_APP_PASSWORD || '').replace(/\s+/g, '');
-const hasGmailConfig = Boolean(gmailUser && gmailAppPassword.length === 16);
+const validEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(gmailUser);
+const hasGmailConfig = Boolean(validEmail && /^[A-Za-z0-9]{16}$/.test(gmailAppPassword));
 const smtpHost = String(process.env.SMTP_HOST || '').trim();
 const smtpPort = Number(process.env.SMTP_PORT || 587);
 const smtpUser = String(process.env.SMTP_USER || '').trim();
 const smtpPassword = String(process.env.SMTP_PASSWORD || '');
 const smtpFrom = String(process.env.SMTP_FROM || smtpUser || gmailUser).trim();
+const hasCustomSmtpSettings = Boolean(smtpHost || smtpUser || smtpPassword || process.env.SMTP_FROM?.trim());
+const validSmtpPort = Number.isInteger(smtpPort) && smtpPort >= 1 && smtpPort <= 65535;
+const smtpSecureSetting = String(process.env.SMTP_SECURE || '').trim().toLowerCase();
+const smtpSecure = smtpPort === 465 || ['true', '1', 'yes'].includes(smtpSecureSetting);
+const validSmtpFrom = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(smtpFrom);
+const smtpTimeouts = {
+  connectionTimeout: 10000,
+  greetingTimeout: 10000,
+  socketTimeout: 20000,
+};
 
-const transporter = smtpHost && smtpUser && smtpPassword
+const customSmtpComplete = Boolean(smtpHost && validSmtpPort && smtpUser && smtpPassword && validSmtpFrom);
+const mailConfigurationError = hasCustomSmtpSettings && !customSmtpComplete
+  ? 'Custom SMTP requires SMTP_HOST, a valid SMTP_PORT, SMTP_USER, SMTP_PASSWORD, and a valid SMTP_FROM address.'
+  : null;
+
+const transporter = customSmtpComplete
   ? nodemailer.createTransport({
       host: smtpHost,
       port: smtpPort,
-      secure: process.env.SMTP_SECURE === 'true' || smtpPort === 465,
+      secure: smtpSecure,
       auth: { user: smtpUser, pass: smtpPassword },
+      ...smtpTimeouts,
     })
-  : hasGmailConfig
+  : !hasCustomSmtpSettings && hasGmailConfig
     ? nodemailer.createTransport({
       service: 'gmail',
       host: 'smtp.gmail.com',
       port: 465,
       secure: true,
       auth: { user: gmailUser, pass: gmailAppPassword },
+      ...smtpTimeouts,
       })
     : null;
 
 const mailFrom = smtpFrom || gmailUser;
 
-function verifyTransporter() {
+async function verifyTransporter() {
   if (!transporter) {
-    console.warn('Password reset email is disabled. Set SMTP_HOST/SMTP_USER/SMTP_PASSWORD or set GMAIL_USER and a 16-character GMAIL_APP_PASSWORD in Tax-backend/.env.');
-    return;
+    console.warn(`${mailConfigurationError || 'Password reset email is disabled. Configure SMTP_HOST/SMTP_USER/SMTP_PASSWORD or GMAIL_USER/GMAIL_APP_PASSWORD in Tax-backend/.env.'}`);
+    return false;
   }
 
-  transporter.verify()
-    .then(() => console.log(`Password reset SMTP ready for ${mailFrom}`))
-    .catch((error) => console.error('Password reset SMTP verification failed:', error.message));
+  try {
+    await transporter.verify();
+    console.log('Password reset SMTP connection verified.');
+    return true;
+  } catch (error) {
+    console.error('Password reset SMTP verification failed:', error.message);
+    return false;
+  }
 }
 
 function passwordResetEmail(otp) {
+  const code = String(otp);
+  if (!/^\d{6}$/.test(code)) throw new Error('Password reset code must contain exactly six digits.');
+
   return `<!doctype html>
 <html lang="en">
   <body style="margin:0;background:#f8fafc;font-family:Arial,sans-serif;color:#172033">
@@ -52,7 +78,7 @@ function passwordResetEmail(otp) {
           </td></tr>
           <tr><td style="padding:0 24px 24px">
             <p>Use this verification code to create a new password:</p>
-            <p style="margin:22px 0;text-align:center;background:#fff7ed;color:#9a3412;border-radius:8px;padding:18px;font-size:32px;font-weight:700;letter-spacing:8px">${otp}</p>
+            <p style="margin:22px 0;text-align:center;background:#fff7ed;color:#9a3412;border-radius:8px;padding:18px;font-size:32px;font-weight:700;letter-spacing:8px">${code}</p>
             <p>This code expires in <strong>10 minutes</strong> and can only be used once.</p>
             <p style="margin-bottom:0;color:#64748b;font-size:13px">If you did not request this, you can safely ignore this email.</p>
           </td></tr>
@@ -63,4 +89,4 @@ function passwordResetEmail(otp) {
 </html>`;
 }
 
-module.exports = { transporter, mailFrom, passwordResetEmail, verifyTransporter };
+module.exports = { transporter, mailFrom, mailConfigurationError, passwordResetEmail, verifyTransporter };

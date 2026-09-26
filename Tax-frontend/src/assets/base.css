@@ -23,6 +23,7 @@
 
 /* semantic color variables for this project */
 :root {
+  font-size: 18px;
   --color-background: var(--vt-c-white);
   --color-background-soft: var(--vt-c-white-soft);
   --color-background-mute: var(--vt-c-white-mute);
@@ -64,7 +65,7 @@ body {
   background: #f5f7fb;
   line-height: 1.6;
   font-family: 'Aptos', 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
-  font-size: 15px;
+  font-size: 1rem;
   font-kerning: normal;
   font-variant-ligatures: common-ligatures;
   text-rendering: optimizeLegibility;

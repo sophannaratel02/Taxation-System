@@ -111,7 +111,7 @@
               <label for="email" class="form-label">Work Email</label>
               <div class="input-wrapper" :class="{ 'has-value': !!form.email }">
                 <span class="input-icon"><i class="bi bi-envelope"></i></span>
-                <input id="email" v-model.trim="form.email" type="email" class="custom-input" placeholder="you@company.com" autocomplete="email" />
+                <input id="email" v-model.trim="form.email" type="email" class="custom-input" placeholder="you@company.com" autocomplete="email" required />
               </div>
             </div>
 
@@ -275,8 +275,13 @@ const strengthColor = computed(() => {
 });
 
 async function submit() {
-  if (!form.name || !form.username || !form.password) {
-    error.value = 'Please fill in all required credentials.';
+  if (!form.name || !form.username || !form.email || !form.password) {
+    error.value = 'Please fill in your name, username, recovery email and password.';
+    return;
+  }
+
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) {
+    error.value = 'Please enter a valid recovery email address.';
     return;
   }
 

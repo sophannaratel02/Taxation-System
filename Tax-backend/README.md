@@ -11,12 +11,15 @@ MYSQL_USER=root
 MYSQL_PASSWORD=your_mysql_password
 MYSQL_DATABASE=taxation_system
 JWT_SECRET=use-a-long-random-secret
-ADMIN_EMAIL=admin@example.com
+ADMIN_EMAIL=your-recovery-address@gmail.com
+ADMIN_PASSWORD=
 GMAIL_USER=your-account@gmail.com
 GMAIL_APP_PASSWORD=your-16-character-app-password
 ```
 
 The backend creates the database, tables, default master data, and an administrator account on first startup.
+
+User document submissions are stored under `Tax-backend/uploads/documents` and tracked in `project_files` with a pending approval status. Uploads support PDF, JPG/PNG, TXT, DOC/DOCX, and XLS/XLSX up to 10 MB. The startup database initializer applies the required metadata and optional-project migration; existing MySQL installations can also run `migrations/002_project_file_uploads.sql` manually.
 
 MySQL 8.0 is running on this machine, but a valid password is required. Do not leave `MYSQL_PASSWORD` empty unless the MySQL account was explicitly configured without a password.
 
@@ -36,13 +39,26 @@ Default development login:
 - Username: `admin`
 - Password: `admin123`
 
-Change the seeded password before using this outside local development.
+On non-production startup, the `admin` account is created or reset to `ADMIN_PASSWORD`; when unset, its development password is `admin123`. Set `ADMIN_PASSWORD` when bootstrapping an admin account in production. Existing production admin passwords are not reset automatically.
 
-Set `ADMIN_EMAIL` to the recovery address for the seeded `admin` account. Existing accounts must also have an email address in the user management screen before password recovery can be used.
+Set `ADMIN_EMAIL` to a real recovery mailbox for the `admin` account. On startup, the configured value replaces the admin account's existing email, including an old placeholder address. Other accounts need a real email address in the user management screen before password recovery can be used. Gmail sending also requires `GMAIL_USER` and a 16-character Google App Password in `GMAIL_APP_PASSWORD`; a normal Gmail password will not work.
 
 ### Password reset email: quick Gmail setup
 
 Password recovery uses Gmail SMTP through Nodemailer. Use a dedicated Gmail account when possible.
+
+For Gmail through the custom SMTP settings in `.env`, use:
+
+```env
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=465
+SMTP_SECURE=true
+SMTP_USER=your-sending-account@gmail.com
+SMTP_PASSWORD=your-16-character-google-app-password
+SMTP_FROM=your-sending-account@gmail.com
+```
+
+When using these `SMTP_*` fields, leave `GMAIL_USER` and `GMAIL_APP_PASSWORD` empty. Set `ADMIN_EMAIL` to the admin recovery inbox; each other user needs their own valid email saved in User Access. The sender mailbox and recovery mailbox can be different.
 
 The backend also accepts any authenticated SMTP provider. For non-Gmail providers, replace the Gmail settings in `.env` with:
 
@@ -55,7 +71,9 @@ SMTP_PASSWORD=your-smtp-password
 SMTP_FROM=your-sender@example.com
 ```
 
-Restart the backend after changing `.env`. Startup logs will show `Password reset SMTP ready` when the connection is valid. A missing or invalid mail configuration correctly returns 503 because the reset code must not be stored unless it can be delivered.
+`ADMIN_EMAIL` is the recovery destination stored on the seeded admin user. `GMAIL_USER` is the account that sends mail; the two may be different. Set `ADMIN_EMAIL` to the real mailbox that should receive the code, and set `GMAIL_USER` plus its 16-character Google App Password to enable Gmail sending.
+
+Restart the backend after changing `.env`. Startup awaits the SMTP handshake and logs `Password reset SMTP connection verified` when it succeeds. Missing or invalid mail configuration returns 503, and the password reset code is not stored unless SMTP accepts the recipient.
 
 1. Open [Google Account](https://myaccount.google.com/) and sign in to the account that will send the emails.
 2. Select **Security** in the left menu.
@@ -70,7 +88,7 @@ GMAIL_USER=your_email@gmail.com
 GMAIL_APP_PASSWORD=xxxx xxxx xxxx xxxx
 ```
 
-Use the App Password, never the normal Gmail password. App passwords may be unavailable for work or school accounts, accounts with Advanced Protection, or accounts with 2-Step Verification enforced only by security keys. The backend logs `Gmail SMTP ready` or the exact SMTP verification error when it starts.
+Use the App Password, never the normal Gmail password. App passwords may be unavailable for work or school accounts, accounts with Advanced Protection, or accounts with 2-Step Verification enforced only by security keys. The backend logs a generic SMTP verification error if Gmail rejects the connection; never paste credentials into source code or logs.
 
 ### Password reset database setup
 

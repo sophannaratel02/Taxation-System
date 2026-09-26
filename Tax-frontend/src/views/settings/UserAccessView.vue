@@ -105,8 +105,10 @@
         </div>
 
         <div class="col-md-4">
-          <label class="form-label fw-semibold small text-secondary">{{ language.isKhmer ? 'អ៊ីមែលសម្រាប់ស្តារពាក្យសម្ងាត់' : 'Recovery Email' }}</label>
-          <input v-model.trim="userForm.email" type="email" class="form-control form-control-md" placeholder="name@company.com" />
+          <label class="form-label fw-semibold small text-secondary">
+            {{ language.isKhmer ? 'អ៊ីមែលសម្រាប់ស្តារពាក្យសម្ងាត់' : 'Recovery Email' }} <span class="text-danger">*</span>
+          </label>
+          <input v-model.trim="userForm.email" type="email" class="form-control form-control-md" placeholder="name@company.com" autocomplete="email" required />
         </div>
 
         <div class="col-md-3">

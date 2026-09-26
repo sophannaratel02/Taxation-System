@@ -17,7 +17,7 @@
           <p class="text-muted mb-0">
             {{ language.isKhmer 
               ? 'ពិនិត្យ និងអនុម័តគម្រោង ឯកសារ និងសំណើសុំច្បាប់ឈប់សម្រាកដែលបានដាក់ស្នើ។' 
-              : 'Audit, authorize, or reject operational projects, digital records, and staff leave applications.' 
+              : 'Review uploaded documents and staff leave applications.' 
             }}
           </p>
         </div>
@@ -53,7 +53,7 @@
 
     <!-- Queue Health & Status Cards -->
     <div class="row g-3 mb-4">
-      <div v-for="stat in queueStats" :key="stat.label" class="col-sm-6 col-xl-3">
+      <div v-for="stat in queueStats" :key="stat.label" class="col-sm-6 col-xl-4">
         <div class="card metric-card border-0 shadow-sm h-100 rounded-4">
           <div class="card-body p-3 d-flex align-items-center gap-3">
             <div class="metric-icon-box rounded-3" :class="stat.bg">
@@ -82,18 +82,6 @@
           {{ language.isKhmer ? 'ទាំងអស់' : 'All Queues' }}
           <span class="badge rounded-pill ms-1" :class="activeTab === 'all' ? 'bg-white text-primary' : 'bg-light text-secondary border'">
             {{ totalQueueCount }}
-          </span>
-        </button>
-
-        <button
-          class="pill-btn"
-          :class="{ active: activeTab === 'projects' }"
-          type="button"
-          @click="activeTab = 'projects'"
-        >
-          {{ language.t('projects') }}
-          <span class="badge rounded-pill ms-1" :class="activeTab === 'projects' ? 'bg-white text-primary' : 'bg-light text-secondary border'">
-            {{ projects.length }}
           </span>
         </button>
 
@@ -138,72 +126,8 @@
 
     <!-- Cards Grid -->
     <div class="row g-4">
-      <!-- 1. Projects Queue -->
-      <div v-if="activeTab === 'all' || activeTab === 'projects'" :class="activeTab === 'all' ? 'col-xl-4' : 'col-12'">
-        <div class="card border-0 shadow-sm rounded-4 h-100 queue-column bg-white">
-          <div class="card-header bg-white py-3 px-4 border-bottom d-flex justify-content-between align-items-center">
-            <div class="d-flex align-items-center gap-2">
-              <div class="column-badge bg-primary-subtle text-primary rounded-3">
-                <i class="bi bi-kanban"></i>
-              </div>
-              <div>
-                <strong class="fs-6 d-block text-dark">{{ language.t('projects') }}</strong>
-                <small class="text-muted">{{ projects.length }} {{ language.isKhmer ? 'សំណើកំពុងរង់ចាំ' : 'pending proposals' }}</small>
-              </div>
-            </div>
-            <span class="badge bg-light text-secondary border font-monospace">PRJ</span>
-          </div>
-
-          <div class="card-body p-3 queue-body custom-scroll">
-            <div
-              v-for="item in filterItems(projects, 'title')"
-              :key="item.id"
-              class="queue-item p-3 mb-3 rounded-3 border bg-white shadow-xs position-relative"
-            >
-              <div class="d-flex justify-content-between align-items-start mb-2">
-                <span class="badge text-bg-light border small font-monospace">#PRJ-{{ item.id }}</span>
-                <span class="badge rounded-pill" :class="statusBadgeClass(item.status)">
-                  {{ item.status || 'PENDING' }}
-                </span>
-              </div>
-
-              <h6 class="fw-bold text-dark mb-1">{{ item.title || 'Untitled Project' }}</h6>
-              <p class="small text-muted mb-3 line-clamp-2">{{ item.description || 'No description provided.' }}</p>
-
-              <div class="d-flex justify-content-between align-items-center pt-2 border-top">
-                <small class="text-muted font-monospace">{{ formatDate(item.created_at || item.date) }}</small>
-                <div class="d-flex gap-1">
-                  <button
-                    class="btn btn-sm btn-outline-danger px-2 rounded-2"
-                    type="button"
-                    :disabled="isSubmitting"
-                    @click="openReviewModal('projects', item, 'Rejected')"
-                  >
-                    <i class="bi bi-x-lg"></i>
-                  </button>
-                  <button
-                    class="btn btn-sm btn-success px-3 rounded-2 shadow-xs"
-                    type="button"
-                    :disabled="isSubmitting"
-                    @click="handleReview('projects', item.id, 'Approved', '')"
-                  >
-                    <i class="bi bi-check-lg me-1"></i>{{ language.isKhmer ? 'អនុម័ត' : 'Approve' }}
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            <div v-if="!filterItems(projects, 'title').length" class="empty-queue-box text-center py-5 text-muted">
-              <i class="bi bi-check2-all fs-1 text-secondary opacity-50 d-block mb-2"></i>
-              <strong class="d-block text-dark">{{ language.isKhmer ? 'គ្មានសំណើគម្រោងឡើយ' : 'No Pending Projects' }}</strong>
-              <small>{{ language.isKhmer ? 'រាល់គម្រោងទាំងអស់ត្រូវបានត្រួតពិនិត្យរួចរាល់។' : 'All proposed projects have been handled.' }}</small>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- 2. Files & Documents Queue -->
-      <div v-if="activeTab === 'all' || activeTab === 'files'" :class="activeTab === 'all' ? 'col-xl-4' : 'col-12'">
+      <!-- Files & Documents Queue -->
+      <div v-if="activeTab === 'all' || activeTab === 'files'" :class="activeTab === 'all' ? 'col-xl-6' : 'col-12'">
         <div class="card border-0 shadow-sm rounded-4 h-100 queue-column bg-white">
           <div class="card-header bg-white py-3 px-4 border-bottom d-flex justify-content-between align-items-center">
             <div class="d-flex align-items-center gap-2">
@@ -237,13 +161,25 @@
                   <h6 class="fw-bold text-dark mb-0 text-truncate" :title="item.file_name">
                     {{ item.file_name || 'document_upload.pdf' }}
                   </h6>
-                  <small class="text-muted">{{ item.size ? `${(item.size / 1024).toFixed(1)} KB` : 'Attached file' }}</small>
+                  <small class="text-muted">
+                    {{ item.file_size ? formatFileSize(item.file_size) : 'Stored document' }}
+                    <span v-if="item.submitted_by_name"> · {{ item.submitted_by_name }}</span>
+                    <span v-if="item.project_title"> · {{ item.project_title }}</span>
+                  </small>
                 </div>
               </div>
 
               <div class="d-flex justify-content-between align-items-center pt-2 border-top">
                 <small class="text-muted font-monospace">{{ formatDate(item.created_at || item.date) }}</small>
                 <div class="d-flex gap-1">
+                  <button
+                    class="btn btn-sm btn-outline-primary px-2 rounded-2"
+                    type="button"
+                    :title="language.isKhmer ? 'ទាញយកឯកសារ' : 'Download uploaded document'"
+                    @click="downloadFile(item)"
+                  >
+                    <i class="bi bi-download"></i>
+                  </button>
                   <button
                     class="btn btn-sm btn-outline-danger px-2 rounded-2"
                     type="button"
@@ -274,7 +210,7 @@
       </div>
 
       <!-- 3. Leave Requests Queue -->
-      <div v-if="activeTab === 'all' || activeTab === 'leaves'" :class="activeTab === 'all' ? 'col-xl-4' : 'col-12'">
+      <div v-if="activeTab === 'all' || activeTab === 'leaves'" :class="activeTab === 'all' ? 'col-xl-6' : 'col-12'">
         <div class="card border-0 shadow-sm rounded-4 h-100 queue-column bg-white">
           <div class="card-header bg-white py-3 px-4 border-bottom d-flex justify-content-between align-items-center">
             <div class="d-flex align-items-center gap-2">
@@ -517,7 +453,6 @@ import { useLanguageStore } from '@/stores/language';
 
 const language = useLanguageStore();
 
-const projects = ref([]);
 const files = ref([]);
 const leaves = ref([]);
 const approvalHistory = ref([]);
@@ -538,12 +473,11 @@ const reviewModal = reactive({
 });
 
 const reviewActions = {
-  projects: api.reviewProject,
   files: api.reviewFile,
   leaves: api.reviewLeave,
 };
 
-const totalQueueCount = computed(() => projects.value.length + files.value.length + leaves.value.length);
+const totalQueueCount = computed(() => files.value.length + leaves.value.length);
 const selectedUserHistory = computed(() => selectedUser.value
   ? approvalHistory.value.filter((entry) => Number(entry.user_id) === Number(selectedUser.value.id))
   : []);
@@ -555,13 +489,6 @@ const queueStats = computed(() => [
     icon: 'bi bi-hourglass-split',
     bg: 'bg-warning-subtle',
     tone: 'text-warning-emphasis'
-  },
-  {
-    label: language.isKhmer ? 'គម្រោងត្រូវត្រួតពិនិត្យ' : 'Pending Projects',
-    value: projects.value.length.toString(),
-    icon: 'bi bi-kanban',
-    bg: 'bg-primary-subtle',
-    tone: 'text-primary'
   },
   {
     label: language.isKhmer ? 'ឯកសារត្រូវផ្ទៀងផ្ទាត់' : 'Pending Files',
@@ -647,6 +574,19 @@ function formatDateTime(value) {
   return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
 }
 
+function formatFileSize(value) {
+  const size = Number(value || 0);
+  return size >= 1024 * 1024 ? `${(size / (1024 * 1024)).toFixed(1)} MB` : `${Math.max(1, Math.round(size / 1024))} KB`;
+}
+
+async function downloadFile(item) {
+  try {
+    await api.downloadFile(item.id);
+  } catch (error) {
+    errorMessage.value = error.message || 'Unable to download the uploaded document.';
+  }
+}
+
 function openUserDetails(userId, fallbackName = '') {
   const user = users.value.find((entry) => Number(entry.id) === Number(userId));
   selectedUser.value = user || { id: userId, name: fallbackName, active: true };
@@ -682,7 +622,6 @@ async function load() {
 
   try {
     const results = await Promise.allSettled([
-      api.projects ? api.projects() : Promise.resolve([]),
       api.adminFiles ? api.adminFiles() : Promise.resolve([]),
       api.leaveRequests ? api.leaveRequests() : Promise.resolve([]),
       api.adminActivity ? api.adminActivity() : Promise.resolve([]),
@@ -691,22 +630,18 @@ async function load() {
 
     if (results[0].status === 'fulfilled') {
       const raw = Array.isArray(results[0].value) ? results[0].value : [];
-      projects.value = raw.filter((item) => isPendingStatus(item.status));
+      files.value = raw.filter((item) => isPendingStatus(item.status));
     }
     if (results[1].status === 'fulfilled') {
       const raw = Array.isArray(results[1].value) ? results[1].value : [];
-      files.value = raw.filter((item) => isPendingStatus(item.status));
+      leaves.value = raw.filter((item) => isPendingStatus(item.status));
     }
     if (results[2].status === 'fulfilled') {
       const raw = Array.isArray(results[2].value) ? results[2].value : [];
-      leaves.value = raw.filter((item) => isPendingStatus(item.status));
-    }
-    if (results[3].status === 'fulfilled') {
-      const raw = Array.isArray(results[3].value) ? results[3].value : [];
       approvalHistory.value = raw.filter((entry) => ['project', 'file', 'leave'].includes(String(entry.entity_type || '').toLowerCase()));
     }
-    if (results[4].status === 'fulfilled') {
-      users.value = Array.isArray(results[4].value) ? results[4].value : [];
+    if (results[3].status === 'fulfilled') {
+      users.value = Array.isArray(results[3].value) ? results[3].value : [];
     }
 
     if (results.some((r) => r.status === 'rejected')) {
@@ -735,7 +670,6 @@ async function handleReview(type, id, status, reason = '') {
     await action(id, { status, reason });
 
     // Optimistically update local array immediately
-    if (type === 'projects') projects.value = projects.value.filter((i) => i.id !== id);
     if (type === 'files') files.value = files.value.filter((i) => i.id !== id);
     if (type === 'leaves') leaves.value = leaves.value.filter((i) => i.id !== id);
 

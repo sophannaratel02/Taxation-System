@@ -29,3 +29,46 @@ a { text-decoration: none; }
   .sidebar-wrapper.is-open { transform: translateX(0); }
   .shell-backdrop { display: block !important; }
 }
+@media print {
+  html.thermal-receipt-print,
+  html.thermal-receipt-print body,
+  html.thermal-receipt-print body #app {
+    width: 80mm !important;
+    min-width: 0 !important;
+    height: auto !important;
+    min-height: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: visible !important;
+    background: #fff !important;
+  }
+
+  html.thermal-receipt-print body * { visibility: hidden !important; }
+
+  html.thermal-receipt-print body .receipt-print-host,
+  html.thermal-receipt-print body .receipt-print-host * { visibility: visible !important; }
+
+  html.thermal-receipt-print body .receipt-print-host {
+    position: absolute !important;
+    top: 0 !important;
+    left: 0 !important;
+    display: block !important;
+    width: 80mm !important;
+    max-width: 80mm !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: visible !important;
+    background: #fff !important;
+  }
+
+  html.thermal-receipt-print body .receipt-print-host .receipt {
+    position: static !important;
+    inset: auto !important;
+    display: block !important;
+    width: 80mm !important;
+    max-width: 80mm !important;
+    margin: 0 !important;
+    padding: 4mm 3mm 5mm !important;
+    box-shadow: none !important;
+  }
+}

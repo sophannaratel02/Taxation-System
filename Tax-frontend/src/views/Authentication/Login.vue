@@ -86,7 +86,7 @@
               <div class="label-row">
                 <label for="password" class="form-label">Security Key / Password</label>
                 <router-link to="/forgot-password" class="forgot-link">
-                  Forgot key?
+                  Forgot Password?
                 </router-link>
               </div>
               <div class="input-wrapper" :class="{ 'has-value': !!form.password }">
@@ -142,8 +142,8 @@
           <!-- Quick Dev Fill + Footer -->
           <footer class="auth-footer">
             <p class="new-account-text">
-              Unregistered staff?
-              <router-link to="/register" class="register-link">Request access</router-link>
+              Need an account?
+              <router-link to="/register" class="register-link">Register Here</router-link>
             </p>
 
             <!-- Clickable Dev helper pill -->

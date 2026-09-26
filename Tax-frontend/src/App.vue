@@ -169,8 +169,8 @@
           <!-- Regular User Workspace -->
           <template v-if="!isAdmin">
             <div class="menu-header">{{ language.t('workspace') }}</div>
-            <router-link to="/user/projects" class="list-group-item list-group-item-action py-2 ps-4" active-class="active">
-              <i class="bi bi-kanban me-2 text-secondary"></i> {{ language.t('projects') }}
+            <router-link to="/user/files" class="list-group-item list-group-item-action py-2 ps-4" active-class="active">
+              <i class="bi bi-file-earmark-arrow-up me-2 text-secondary"></i> {{ language.isKhmer ? 'ឯកសាររបស់ខ្ញុំ' : 'My Files' }}
             </router-link>
             <router-link to="/user/leave" class="list-group-item list-group-item-action py-2 ps-4" active-class="active">
               <i class="bi bi-calendar2-check me-2 text-secondary"></i> {{ language.t('leaveRequest') }}
@@ -198,7 +198,7 @@
               active-class="active"
             >
               <i class="bi bi-cart4 me-3 fs-6"></i>
-              <span>{{ language.isKhmer ? 'លក់ទំនិញ (POS)' : 'Open POS Checkout' }}</span>
+              <span>{{ language.isKhmer ? 'លក់ទំនិញ (POS)' : 'Open POS ' }}</span>
               <span class="badge bg-success-subtle text-success ms-auto small">LIVE</span>
             </router-link>
 
@@ -635,6 +635,16 @@ function logout() {
 .dropdown-fade-leave-to {
   opacity: 0;
   transform: translateY(-6px);
+}
+
+@media (max-width: 420px) {
+  .top-navbar {
+    padding-inline: 0.65rem !important;
+  }
+
+  .brand-link .leading-tight {
+    display: none !important;
+  }
 }
 
 @media print {

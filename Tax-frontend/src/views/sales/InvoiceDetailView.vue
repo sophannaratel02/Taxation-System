@@ -26,7 +26,7 @@
 
     <template v-else-if="invoice">
       <div class="invoice-detail-layout">
-        <div class="receipt-panel">
+        <div class="receipt-panel receipt-print-host">
           <ThermalReceipt40Col
             :company="receiptCompany"
             :receipt-no="invoice.id"
@@ -71,6 +71,7 @@ import { useRoute } from 'vue-router';
 import { useTaxStore } from '@/stores/tax';
 import { useLanguageStore } from '@/stores/language';
 import ThermalReceipt40Col from '@/components/receipt/ThermalReceipt40Col.vue';
+import { printThermalReceipt } from '@/utils/thermalPrint';
 
 const route = useRoute();
 const tax = useTaxStore();
@@ -117,7 +118,7 @@ async function loadInvoice() {
 }
 
 function printInvoice() {
-  window.print();
+  printThermalReceipt();
 }
 
 onMounted(loadInvoice);

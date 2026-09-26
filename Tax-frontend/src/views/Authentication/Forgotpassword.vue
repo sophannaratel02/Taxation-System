@@ -257,7 +257,9 @@ const description = computed(() => {
 });
 
 const maskedEmail = computed(() => {
-  if (!email.value || !email.value.includes('@')) return email.value || 'your registered email';
+  if (!email.value || !email.value.includes('@')) {
+    return text('your registered recovery email', 'អ៊ីមែលសម្រាប់ស្តារគណនីដែលបានចុះឈ្មោះ');
+  }
   return email.value.replace(/^(.{2}).*(@.*)$/, '$1••••$2');
 });
 
@@ -370,7 +372,7 @@ function handlePaste(event) {
 
 async function verifyOtp() {
   const code = otpDigits.value.join('');
-  if (code.length !== 6) return;
+  if (loading.value || code.length !== 6) return;
 
   clearFeedback();
   loading.value = true;

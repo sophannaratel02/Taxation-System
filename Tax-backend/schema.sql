@@ -154,9 +154,11 @@ CREATE TABLE IF NOT EXISTS projects (
 
 CREATE TABLE IF NOT EXISTS project_files (
   id BIGINT AUTO_INCREMENT PRIMARY KEY,
-  project_id BIGINT NOT NULL,
+  project_id BIGINT NULL,
   file_name VARCHAR(255) NOT NULL,
   file_url VARCHAR(500) NULL,
+  file_size BIGINT NULL,
+  mime_type VARCHAR(120) NULL,
   status ENUM('Pending Approval','Approved','Rejected') NOT NULL DEFAULT 'Pending Approval',
   submitted_by INT NOT NULL,
   reviewed_by INT NULL,

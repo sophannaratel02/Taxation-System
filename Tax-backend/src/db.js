@@ -223,9 +223,11 @@ const schemaStatements = [
 
   `CREATE TABLE IF NOT EXISTS project_files (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
-    project_id BIGINT NOT NULL,
+    project_id BIGINT NULL,
     file_name VARCHAR(255) NOT NULL,
     file_url VARCHAR(500) NULL,
+    file_size BIGINT NULL,
+    mime_type VARCHAR(120) NULL,
     status ENUM('Pending Approval','Approved','Rejected') NOT NULL DEFAULT 'Pending Approval',
     submitted_by INT NOT NULL,
     reviewed_by INT NULL,
@@ -342,6 +344,9 @@ async function initializeDatabase() {
   await addColumnIfMissing('vendors', 'vat_tin', 'VARCHAR(50) NULL');
   await addColumnIfMissing('users', 'email', 'VARCHAR(255) NULL');
   await addColumnIfMissing('users', 'active', 'TINYINT(1) NOT NULL DEFAULT 1');
+  await addColumnIfMissing('project_files', 'file_size', 'BIGINT NULL');
+  await addColumnIfMissing('project_files', 'mime_type', 'VARCHAR(120) NULL');
+  await pool.query('ALTER TABLE project_files MODIFY COLUMN project_id BIGINT NULL');
   await addColumnIfMissing('vendors', 'active', 'TINYINT(1) NOT NULL DEFAULT 1');
   await addColumnIfMissing('customers', 'vat_tin', 'VARCHAR(50) NULL');
   await addColumnIfMissing('customers', 'credit_limit', 'DECIMAL(14,2) NOT NULL DEFAULT 0.00');
@@ -397,19 +402,25 @@ async function initializeDatabase() {
     );
   }
 
-  // 2. Seed Default Admin User
-  const [users] = await pool.query('SELECT id FROM users LIMIT 1');
-  if (users.length === 0) {
-    const hashedPassword = await bcrypt.hash('admin123', 10);
+  // 2. Ensure the default admin exists, even if other users were already created.
+  const adminPassword = process.env.ADMIN_PASSWORD || (process.env.NODE_ENV === 'production' ? '' : 'admin123');
+  const [admins] = await pool.query('SELECT id FROM users WHERE username = ? LIMIT 1', ['admin']);
+  if (admins.length === 0) {
+    if (!adminPassword) throw new Error('Set ADMIN_PASSWORD before creating the production admin account.');
     await pool.query(
       'INSERT INTO users (name, username, email, password_hash, role) VALUES (?, ?, ?, ?, ?)',
-      ['Admin User', 'admin', process.env.ADMIN_EMAIL?.trim().toLowerCase() || null, hashedPassword, 'admin']
+      ['Admin User', 'admin', process.env.ADMIN_EMAIL?.trim().toLowerCase() || null, await bcrypt.hash(adminPassword, 10), 'admin']
+    );
+  } else if (process.env.NODE_ENV !== 'production') {
+    await pool.query(
+      'UPDATE users SET password_hash = ?, role = ?, active = 1 WHERE username = ?',
+      [await bcrypt.hash(adminPassword, 10), 'admin', 'admin']
     );
   }
   if (process.env.ADMIN_EMAIL?.trim()) {
     await pool.query(
-      'UPDATE users SET email = ? WHERE username = ? AND (email IS NULL OR email = ?)',
-      [process.env.ADMIN_EMAIL.trim().toLowerCase(), 'admin', '']
+      'UPDATE users SET email = ? WHERE username = ?',
+      [process.env.ADMIN_EMAIL.trim().toLowerCase(), 'admin']
     );
   }
 

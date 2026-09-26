@@ -499,6 +499,7 @@ import { useTaxStore } from '@/stores/tax';
 import { useLanguageStore } from '@/stores/language';
 import ThermalReceipt40Col from '@/components/receipt/ThermalReceipt40Col.vue';
 import { generatePayableKhqr } from '@/utils/khqr';
+import { printThermalReceipt } from '@/utils/thermalPrint';
 
 const tax = useTaxStore();
 const language = useLanguageStore();
@@ -779,7 +780,7 @@ async function completeSale() {
 
     // Trigger Print after thermal container has rendered
     window.setTimeout(() => {
-      window.print();
+      printThermalReceipt();
       window.setTimeout(() => {
         printReceipt.value = null;
       }, 500);
@@ -1078,10 +1079,9 @@ async function completeSale() {
     background: #fff !important;
   }
 
-  :global(nav),
-  :global(aside),
-  :global(header),
-  :global(footer) {
+  :global(.top-navbar),
+  :global(.sidebar-wrapper),
+  :global(.sidebar-backdrop) {
     display: none !important;
   }
 
@@ -1112,7 +1112,7 @@ async function completeSale() {
     width: 80mm !important;
     max-width: 80mm !important;
     margin: 0 !important;
-    padding: 0 4mm !important;
+    padding: 0 !important;
     box-sizing: border-box !important;
     background: #fff !important;
     color: #000 !important;

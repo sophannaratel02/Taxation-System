@@ -1,7 +1,8 @@
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000/api';
 
 async function request(path, options = {}) {
-  const headers = { 'Content-Type': 'application/json', ...(options.headers || {}) };
+  const isFormData = typeof FormData !== 'undefined' && options.body instanceof FormData;
+  const headers = { ...(isFormData ? {} : { 'Content-Type': 'application/json' }), ...(options.headers || {}) };
   const token = localStorage.getItem('tax_token');
   if (token) headers.Authorization = `Bearer ${token}`;
   const response = await fetch(`${API_URL}${path}`, { ...options, headers });
@@ -12,6 +13,28 @@ async function request(path, options = {}) {
   }
   if (!response.ok) throw new Error(payload.message || `Request failed (${response.status})`);
   return payload;
+}
+
+async function downloadFile(id) {
+  const headers = {};
+  const token = localStorage.getItem('tax_token');
+  if (token) headers.Authorization = `Bearer ${token}`;
+
+  const response = await fetch(`${API_URL}/files/${encodeURIComponent(id)}/download`, { headers });
+  if (!response.ok) {
+    const payload = await response.json().catch(() => ({}));
+    throw new Error(payload.message || `Download failed (${response.status})`);
+  }
+
+  const blob = await response.blob();
+  const objectUrl = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = objectUrl;
+  link.download = `document-${id}`;
+  document.body.append(link);
+  link.click();
+  link.remove();
+  window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
 }
 
 export const api = {
@@ -48,7 +71,13 @@ export const api = {
   projects: () => request('/projects'),
   saveProject: (project) => request('/projects', { method: 'POST', body: JSON.stringify(project) }),
   projectFiles: (projectId) => request(`/projects/${projectId}/files`),
-  saveProjectFile: (projectId, file) => request(`/projects/${projectId}/files`, { method: 'POST', body: JSON.stringify(file) }),
+  userFiles: () => request('/files'),
+  uploadUserFile: (file) => {
+    const body = new FormData();
+    body.append('file', file);
+    return request('/files', { method: 'POST', body });
+  },
+  downloadFile,
   leaveRequests: () => request('/leave-requests'),
   saveLeaveRequest: (leave) => request('/leave-requests', { method: 'POST', body: JSON.stringify(leave) }),
   notifications: () => request('/notifications'),
