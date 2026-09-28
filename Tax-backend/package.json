@@ -13,6 +13,7 @@
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
+    "bakong-khqr": "^1.0.20",
     "bcryptjs": "^3.0.3",
     "cors": "^2.8.6",
     "dotenv": "^18.0.2",
@@ -20,6 +21,7 @@
     "jsonwebtoken": "^9.0.3",
     "multer": "^2.4.0",
     "mysql2": "^3.24.4",
-    "nodemailer": "^10.0.10"
+    "nodemailer": "^10.0.10",
+    "qrcode": "^1.5.4"
   }
 }

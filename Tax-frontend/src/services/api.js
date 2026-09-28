@@ -96,6 +96,8 @@ export const api = {
   transactions: () => request('/transactions'),
   adjustStock: (payload) => request('/stock/adjustments', { method: 'POST', body: JSON.stringify(payload) }),
   completeSale: (payload) => request('/sales', { method: 'POST', body: JSON.stringify(payload) }),
+  createKhqrIntent: (payload) => request('/khqr/intents', { method: 'POST', body: JSON.stringify(payload) }),
+  verifyKhqrIntent: (id) => request(`/khqr/intents/${encodeURIComponent(id)}/verify`, { method: 'POST', body: JSON.stringify({}) }),
   currentRegister: (branch) => request(`/register/current?branch=${encodeURIComponent(branch || '')}`),
   openRegister: (payload) => request('/register/open', { method: 'POST', body: JSON.stringify(payload) }),
   closeRegister: (payload) => request('/register/close', { method: 'POST', body: JSON.stringify(payload) }),

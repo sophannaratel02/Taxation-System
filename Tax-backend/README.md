@@ -11,6 +11,10 @@ MYSQL_USER=root
 MYSQL_PASSWORD=your_mysql_password
 MYSQL_DATABASE=taxation_system
 JWT_SECRET=use-a-long-random-secret
+ABA_PAYWAY_MERCHANT_ID=your-payway-merchant-id
+ABA_PAYWAY_API_KEY=your-payway-api-key
+ABA_PAYWAY_BASE_URL=https://checkout-sandbox.payway.com.kh
+ABA_PAYWAY_CALLBACK_URL=https://your-public-domain/api/khqr/payway/callback
 ADMIN_EMAIL=your-recovery-address@gmail.com
 ADMIN_PASSWORD=
 GMAIL_USER=your-account@gmail.com
@@ -19,7 +23,15 @@ GMAIL_APP_PASSWORD=your-16-character-app-password
 
 The backend creates the database, tables, default master data, and an administrator account on first startup.
 
-User document submissions are stored under `Tax-backend/uploads/documents` and tracked in `project_files` with a pending approval status. Uploads support PDF, JPG/PNG, TXT, DOC/DOCX, and XLS/XLSX up to 10 MB. The startup database initializer applies the required metadata and optional-project migration; existing MySQL installations can also run `migrations/002_project_file_uploads.sql` manually.
+User document submissions are stored under `Tax-backend/uploads/documents` and tracked in `project_files` with a pending approval status. Uploads support PDF, JPG/PNG, TXT, DOC/DOCX, and XLS/XLSX up to 10 MB. The startup database initializer applies the required metadata and payment-intent table; existing MySQL installations can run `migrations/002_project_file_uploads.sql` and `migrations/003_khqr_payment_intents.sql` manually.
+
+### ABA PayWay KHQR scan-to-pay setup
+
+Set `ABA_PAYWAY_MERCHANT_ID`, `ABA_PAYWAY_API_KEY`, and `ABA_PAYWAY_CALLBACK_URL` in the backend `.env`. The callback URL must be publicly reachable over HTTPS at `/api/khqr/payway/callback`, and ABA must allow/whitelist the callback URL. Localhost URLs cannot receive callbacks from ABA. Keep the API key on the server and never put it in frontend settings or source control. `ABA_PAYWAY_BASE_URL` defaults to `https://checkout-sandbox.payway.com.kh`; the backend uses PayWay's `generate-qr` and `check-transaction-2` APIs with HMAC-SHA512 signatures. A configured full endpoint URL is also accepted; the backend uses its HTTPS origin to select the PayWay APIs.
+
+POS requests an ABA KHQR for the current cart total. PayWay posts signed payment callbacks to the backend, which validates the signature, merchant, approved status, original currency, and amount before marking an intent paid. POS observes the verified status, completes the sale, and prints the receipt automatically. The backend also calls PayWay's check-transaction API to confirm the transaction independently. The existing database initializer adds the unique `payway_tran_id` column to older installations automatically.
+
+Sandbox credentials and the sandbox host are for testing and do not settle real payments. To accept real payments, use production credentials issued by ABA and set `ABA_PAYWAY_BASE_URL=https://checkout.payway.com.kh`. Verify live payments with an authorized low-value test transaction before taking customer payments.
 
 MySQL 8.0 is running on this machine, but a valid password is required. Do not leave `MYSQL_PASSWORD` empty unless the MySQL account was explicitly configured without a password.
 

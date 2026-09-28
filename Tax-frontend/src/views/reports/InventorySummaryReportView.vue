@@ -23,7 +23,7 @@
         </div>
 
         <div class="d-flex gap-2">
-          <button class="btn btn-outline-secondary bg-white px-3 py-2 rounded-3 shadow-xs" type="button" @click="printReport">
+          <button class="btn btn-outline-secondary  px-3 py-2 rounded-3 shadow-xs" type="button" @click="printReport">
             <i class="bi bi-printer me-2"></i>{{ language.isKhmer ? 'បោះពុម្ព' : 'Print' }}
           </button>
           <button class="btn btn-primary px-3 py-2 rounded-3 shadow-sm pulse-btn" type="button" @click="exportCSV">

@@ -1,0 +1,20 @@
+CREATE TABLE IF NOT EXISTS khqr_payment_intents (
+  id CHAR(36) PRIMARY KEY,
+  user_id INT NOT NULL,
+  payway_tran_id VARCHAR(20) NULL,
+  md5 CHAR(32) NOT NULL UNIQUE,
+  qr_payload TEXT NOT NULL,
+  merchant_account VARCHAR(80) NOT NULL,
+  amount DECIMAL(14,2) NOT NULL,
+  currency ENUM('USD','KHR') NOT NULL,
+  status ENUM('Pending','Paid','Used','Expired') NOT NULL DEFAULT 'Pending',
+  transaction_hash VARCHAR(128) NULL,
+  expires_at DATETIME NOT NULL,
+  verified_at DATETIME NULL,
+  used_at DATETIME NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+  UNIQUE KEY uq_khqr_payway_tran_id (payway_tran_id),
+  INDEX idx_khqr_intents_user_status (user_id, status),
+  INDEX idx_khqr_intents_expiry (status, expires_at)
+) ENGINE=InnoDB;

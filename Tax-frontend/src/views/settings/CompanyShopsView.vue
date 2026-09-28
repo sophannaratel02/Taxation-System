@@ -42,6 +42,7 @@
         </div>
       </div>
     </Transition>
+    <div v-if="saveError" class="alert alert-danger mb-4" role="alert">{{ saveError }}</div>
 
     <form @submit.prevent="save">
       <div class="row g-4">
@@ -403,6 +404,7 @@ const tax = useTaxStore();
 const language = useLanguageStore();
 
 const saved = ref(false);
+const saveError = ref('');
 
 const form = reactive({
   companyName: tax.settings?.companyName || '',
@@ -457,7 +459,7 @@ function optionLabel(opt) {
   return language.isKhmer ? opt.labelKh : opt.labelEn;
 }
 
-function save() {
+async function save() {
   const receiptConfig = receiptOptions.reduce((acc, opt) => {
     acc[opt.key] = opt.enabled;
     return acc;
@@ -470,17 +472,22 @@ function save() {
     receiptOptions: receiptConfig
   };
 
-  if (typeof tax.saveSettings === 'function') {
-    tax.saveSettings(payload);
-  } else {
-    tax.settings = { ...tax.settings, ...payload };
-  }
-
-  saved.value = true;
-  window.clearTimeout(save.timer);
-  save.timer = window.setTimeout(() => {
+  try {
+    if (typeof tax.saveSettings === 'function') {
+      await tax.saveSettings(payload);
+    } else {
+      tax.settings = { ...tax.settings, ...payload };
+    }
+    saveError.value = '';
+    saved.value = true;
+    window.clearTimeout(save.timer);
+    save.timer = window.setTimeout(() => {
+      saved.value = false;
+    }, 3000);
+  } catch (error) {
     saved.value = false;
-  }, 3000);
+    saveError.value = error?.message || 'Unable to save company settings';
+  }
 }
 </script>
 

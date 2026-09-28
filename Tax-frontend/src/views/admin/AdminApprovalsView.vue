@@ -23,14 +23,14 @@
         </div>
 
         <button
-          class="btn btn-outline-primary bg-white px-4 py-2 rounded-3 shadow-xs d-inline-flex align-items-center"
+          class="btn btn-outline-primary   px-4 py-2 rounded-3 shadow-xs d-inline-flex align-items-center"
           type="button"
           :disabled="isLoading"
           @click="load"
         >
           <span v-if="isLoading" class="spinner-border spinner-border-sm me-2" role="status"></span>
           <i v-else class="bi bi-arrow-clockwise me-2"></i>
-          {{ language.isKhmer ? 'ធ្វើបច្ចុប្បន្នភាព' : 'Refresh Queues' }}
+          {{ language.isKhmer ? 'ធ្វើបច្ចុប្បន្នភាព' : 'Refresh' }}
         </button>
       </div>
     </div>

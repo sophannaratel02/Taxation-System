@@ -558,8 +558,8 @@ function logout() {
 
 /* 5. Sidebar Layout */
 .sidebar-wrapper {
-  width: 260px;
-  min-width: 260px;
+  width: 270px;
+  min-width: 270px;
   transition: transform 0.25s ease-in-out;
 }
 

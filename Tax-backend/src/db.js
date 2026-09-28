@@ -44,6 +44,17 @@ async function addColumnIfMissing(tableName, columnName, definition) {
   }
 }
 
+async function addUniqueIndexIfMissing(tableName, indexName, columnName) {
+  const [indexes] = await pool.query(
+    `SELECT COUNT(*) AS count FROM information_schema.STATISTICS
+     WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ? AND INDEX_NAME = ?`,
+    [dbConfig.database, tableName, indexName]
+  );
+  if (Number(indexes[0].count) === 0) {
+    await pool.query(`ALTER TABLE \`${tableName}\` ADD UNIQUE INDEX \`${indexName}\` (\`${columnName}\`)`);
+  }
+}
+
 const schemaStatements = [
   `CREATE TABLE IF NOT EXISTS settings (
     setting_key VARCHAR(80) PRIMARY KEY,
@@ -130,6 +141,27 @@ const schemaStatements = [
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE SET NULL,
     INDEX idx_invoices_created_at (created_at)
+  ) ENGINE=InnoDB;`,
+
+  `CREATE TABLE IF NOT EXISTS khqr_payment_intents (
+    id CHAR(36) PRIMARY KEY,
+    user_id INT NOT NULL,
+    payway_tran_id VARCHAR(20) NULL,
+    md5 CHAR(32) NOT NULL UNIQUE,
+    qr_payload TEXT NOT NULL,
+    merchant_account VARCHAR(80) NOT NULL,
+    amount DECIMAL(14,2) NOT NULL,
+    currency ENUM('USD','KHR') NOT NULL,
+    status ENUM('Pending','Paid','Used','Expired') NOT NULL DEFAULT 'Pending',
+    transaction_hash VARCHAR(128) NULL,
+    expires_at DATETIME NOT NULL,
+    verified_at DATETIME NULL,
+    used_at DATETIME NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    UNIQUE KEY uq_khqr_payway_tran_id (payway_tran_id),
+    INDEX idx_khqr_intents_user_status (user_id, status),
+    INDEX idx_khqr_intents_expiry (status, expires_at)
   ) ENGINE=InnoDB;`,
 
   `CREATE TABLE IF NOT EXISTS invoice_lines (
@@ -341,6 +373,8 @@ async function initializeDatabase() {
   }
 
   // Keep databases created by older project versions compatible with the current API.
+  await addColumnIfMissing('khqr_payment_intents', 'payway_tran_id', 'VARCHAR(20) NULL');
+  await addUniqueIndexIfMissing('khqr_payment_intents', 'uq_khqr_payway_tran_id', 'payway_tran_id');
   await addColumnIfMissing('vendors', 'vat_tin', 'VARCHAR(50) NULL');
   await addColumnIfMissing('users', 'email', 'VARCHAR(255) NULL');
   await addColumnIfMissing('users', 'active', 'TINYINT(1) NOT NULL DEFAULT 1');

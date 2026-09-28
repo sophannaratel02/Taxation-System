@@ -21,7 +21,7 @@ const smtpTimeouts = {
 };
 
 const customSmtpComplete = Boolean(smtpHost && validSmtpPort && smtpUser && smtpPassword && validSmtpFrom);
-const mailConfigurationError = hasCustomSmtpSettings && !customSmtpComplete
+const mailConfigurationError = hasCustomSmtpSettings && !customSmtpComplete && !hasGmailConfig
   ? 'Custom SMTP requires SMTP_HOST, a valid SMTP_PORT, SMTP_USER, SMTP_PASSWORD, and a valid SMTP_FROM address.'
   : null;
 
@@ -33,7 +33,7 @@ const transporter = customSmtpComplete
       auth: { user: smtpUser, pass: smtpPassword },
       ...smtpTimeouts,
     })
-  : !hasCustomSmtpSettings && hasGmailConfig
+  : hasGmailConfig
     ? nodemailer.createTransport({
       service: 'gmail',
       host: 'smtp.gmail.com',

@@ -90,7 +90,7 @@
           <input
             v-for="(_, index) in otpDigits"
             :key="index"
-            :ref="(element) => setOtpRef(element, index)"
+            :ref="(el) => setOtpRef(el, index)"
             v-model="otpDigits[index]"
             type="text"
             inputmode="numeric"
@@ -218,7 +218,7 @@ const step = ref(1);
 const emailOrUsername = ref('');
 const email = ref('');
 const otpDigits = ref(['', '', '', '', '', '']);
-const otpRefs = [];
+const otpRefs = ref([]);
 const resetToken = ref('');
 const newPassword = ref('');
 const confirmPassword = ref('');
@@ -293,12 +293,14 @@ function startResendTimer() {
   resendSeconds.value = 60;
   resendTimer = setInterval(() => {
     resendSeconds.value -= 1;
-    if (resendSeconds.value <= 0) clearInterval(resendTimer);
+    if (resendSeconds.value <= 0) {
+      clearInterval(resendTimer);
+    }
   }, 1000);
 }
 
-function setOtpRef(element, index) {
-  if (element) otpRefs[index] = element;
+function setOtpRef(el, idx) {
+  if (el) otpRefs.value[idx] = el;
 }
 
 async function requestOtp() {
@@ -306,9 +308,8 @@ async function requestOtp() {
   loading.value = true;
 
   try {
-    await api.forgotPassword(emailOrUsername.value);
-    // Keep the original identifier because the backend intentionally returns a generic response.
-    email.value = emailOrUsername.value;
+    const res = await api.forgotPassword(emailOrUsername.value);
+    email.value = res?.email || emailOrUsername.value;
     step.value = 2;
     otpDigits.value = ['', '', '', '', '', ''];
     startResendTimer();
@@ -317,10 +318,10 @@ async function requestOtp() {
       'លេខកូដផ្ទៀងផ្ទាត់ត្រូវបានផ្ញើទៅកាន់អ៊ីមែលសង្គ្រោះរបស់អ្នក។'
     );
     nextTick(() => {
-      otpRefs[0]?.focus();
+      otpRefs.value[0]?.focus();
     });
   } catch (requestError) {
-    error.value = requestError.message || text('Failed to request OTP code.', 'មិនអាចផ្ញើលេខកូដផ្ទៀងផ្ទាត់បានទេ។');
+    error.value = requestError?.response?.data?.message || requestError.message || text('Failed to request OTP code.', 'មិនអាចផ្ញើលេខកូដផ្ទៀងផ្ទាត់បានទេ។');
   } finally {
     loading.value = false;
   }
@@ -336,10 +337,11 @@ function handleOtpInput(index, event) {
   otpDigits.value[index] = clean ? clean.slice(-1) : '';
 
   if (otpDigits.value[index] && index < 5) {
-    otpRefs[index + 1]?.focus();
+    nextTick(() => {
+      otpRefs.value[index + 1]?.focus();
+    });
   }
 
-  // Auto-verify if all 6 digits are provided
   if (otpDigits.value.join('').length === 6) {
     verifyOtp();
   }
@@ -349,7 +351,7 @@ function handleBackspace(index, event) {
   if (!otpDigits.value[index] && index > 0) {
     event.preventDefault();
     otpDigits.value[index - 1] = '';
-    otpRefs[index - 1]?.focus();
+    otpRefs.value[index - 1]?.focus();
   }
 }
 
@@ -363,7 +365,7 @@ function handlePaste(event) {
   }
 
   const nextFocusIndex = Math.min(digits.length, 5);
-  otpRefs[nextFocusIndex]?.focus();
+  otpRefs.value[nextFocusIndex]?.focus();
 
   if (otpDigits.value.join('').length === 6) {
     verifyOtp();
@@ -383,7 +385,7 @@ async function verifyOtp() {
     step.value = 3;
     success.value = text('Code verified successfully.', 'លេខកូដផ្ទៀងផ្ទាត់បានត្រឹមត្រូវ។');
   } catch (requestError) {
-    error.value = requestError.message || text('Invalid or expired OTP code.', 'លេខកូដមិនត្រឹមត្រូវ ឬផុតកំណត់។');
+    error.value = requestError?.response?.data?.message || requestError.message || text('Invalid or expired OTP code.', 'លេខកូដមិនត្រឹមត្រូវ ឬផុតកំណត់។');
   } finally {
     loading.value = false;
   }
@@ -403,8 +405,8 @@ async function resetPassword() {
     await api.resetPassword({
       email: email.value,
       otp: otpDigits.value.join(''),
-      newPassword: newPassword.value,
       resetToken: resetToken.value,
+      newPassword: newPassword.value,
     });
 
     success.value = text(
@@ -416,7 +418,7 @@ async function resetPassword() {
       router.push('/login');
     }, 1500);
   } catch (requestError) {
-    error.value = requestError.message || text('Failed to reset password.', 'មិនអាចកំណត់ពាក្យសម្ងាត់ឡើងវិញបានទេ។');
+    error.value = requestError?.response?.data?.message || requestError.message || text('Failed to reset password.', 'មិនអាចកំណត់ពាក្យសម្ងាត់ឡើងវិញបានទេ។');
   } finally {
     loading.value = false;
   }

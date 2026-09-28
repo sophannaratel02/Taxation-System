@@ -23,7 +23,7 @@
         </div>
 
         <button
-          class="btn btn-outline-primary bg-white px-4 py-2 rounded-3 shadow-xs"
+          class="btn btn-outline-primary  px-4 py-2 rounded-3 shadow-xs"
           type="button"
           :disabled="loading"
           @click="load"

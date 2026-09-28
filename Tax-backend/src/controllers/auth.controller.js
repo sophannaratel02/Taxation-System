@@ -88,7 +88,7 @@ async function forgotPassword(req, res) {
     await connection.commit();
     transactionStarted = false;
     console.log('Password reset email accepted by SMTP.');
-    return res.json(genericResponse);
+    return res.json({ ok: true, message: 'Verification code sent to the recovery email.' });
   } catch (error) {
     if (connection && transactionStarted) await connection.rollback().catch(() => {});
     console.error('Password reset email failed:', error.message);

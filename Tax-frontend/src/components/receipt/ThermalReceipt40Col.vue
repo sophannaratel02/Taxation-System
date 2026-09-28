@@ -113,8 +113,12 @@
     <!-- Payment section -->
     <section class="receipt-summary pt-1">
       <div class="summary-row">
-        <span>Received</span>
+        <span>Received USD</span>
         <strong>${{ Number(tenderedUSD).toFixed(2) }}</strong>
+      </div>
+      <div v-if="Number(tenderedKHR) > 0" class="summary-row">
+        <span>Received KHR</span>
+        <strong>{{ Math.round(Number(tenderedKHR)).toLocaleString() }} ៛</strong>
       </div>
       <div class="summary-row">
         <span>Change</span>
@@ -165,6 +169,7 @@ const props = defineProps({
   vatRate: { type: [Number, String], default: 10 },
   grandTotal: { type: Number, default: 0 },
   tenderedUSD: { type: Number, default: 0 },
+  tenderedKHR: { type: Number, default: 0 },
   changeUSD: { type: Number, default: 0 },
   exchangeRate: { type: Number, default: 4000 }
   ,khqrImage: { type: String, default: '' }
