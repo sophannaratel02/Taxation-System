@@ -1,0 +1,1 @@
+function e(){let e=document.documentElement,t=`thermal-receipt-print`,n=()=>{e.classList.remove(t),window.removeEventListener(`afterprint`,n)};e.classList.add(t),window.addEventListener(`afterprint`,n,{once:!0});try{window.print()}catch(e){throw n(),e}}export{e as t};
