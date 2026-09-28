@@ -1,4 +1,10 @@
 {
+  "name": "tax-system",
+  "private": true,
+  "scripts": {
+    "start": "node Tax-backend/server.js",
+    "dev": "node Tax-backend/server.js"
+  },
   "dependencies": {
     "@google/genai": "^2.23.0"
   }

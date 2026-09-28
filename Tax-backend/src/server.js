@@ -1,4 +1,7 @@
-require('dotenv').config();
+const path = require('path');
+const envPath = path.resolve(__dirname, '../.env');
+require('dotenv').config({ path: envPath });
+require('dotenv').config({ path: path.resolve(__dirname, '../../.env') });
 
 const app = require('./app');
 const { pool, initializeDatabase } = require('./db');
