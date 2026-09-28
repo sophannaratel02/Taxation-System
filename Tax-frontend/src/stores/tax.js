@@ -18,7 +18,7 @@ export const useTaxStore = defineStore('tax', () => {
 
   async function initialize() {
     loading.value = true; error.value = '';
-    try { if (!localStorage.getItem('tax_token')) { const session = await api.login('admin', 'admin123'); localStorage.setItem('tax_token', session.token); localStorage.setItem('tax_user', JSON.stringify(session.user)); } const [remoteSettings, remoteItems, remoteVendors, remoteCustomers, remoteInvoices, remoteTransactions, remoteOrders] = await Promise.all([api.settings(), api.items(), api.vendors(), api.customers(), api.invoices(), api.transactions(), api.purchaseOrders()]); settings.value = { ...settings.value, ...remoteSettings }; items.value = remoteItems; vendors.value = remoteVendors; customers.value = remoteCustomers; invoices.value = remoteInvoices; transactions.value = remoteTransactions; purchaseOrders.value = remoteOrders; }
+    try { const [remoteSettings, remoteItems, remoteVendors, remoteCustomers, remoteInvoices, remoteTransactions, remoteOrders] = await Promise.all([api.settings(), api.items(), api.vendors(), api.customers(), api.invoices(), api.transactions(), api.purchaseOrders()]); settings.value = { ...settings.value, ...remoteSettings }; items.value = remoteItems; vendors.value = remoteVendors; customers.value = remoteCustomers; invoices.value = remoteInvoices; transactions.value = remoteTransactions; purchaseOrders.value = remoteOrders; }
     catch (requestError) { error.value = requestError.message; }
     finally { loading.value = false; }
   }

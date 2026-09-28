@@ -146,20 +146,6 @@
               <router-link to="/register" class="register-link">Register Here</router-link>
             </p>
 
-            <!-- Clickable Dev helper pill -->
-            <button
-              type="button"
-              class="dev-credential-chip"
-              title="Click to auto-populate test credentials"
-              @click="quickFillDev"
-            >
-              <div class="chip-label">
-                <i class="bi bi-lightning-charge-fill"></i>
-                <span>Demo Sandbox</span>
-              </div>
-              <span class="chip-code">admin / admin123</span>
-              <i class="bi bi-cursor-fill click-hint"></i>
-            </button>
           </footer>
         </div>
       </section>
@@ -188,13 +174,6 @@ const form = reactive({
 });
 
 const currentYear = computed(() => new Date().getFullYear());
-
-// Convenience helper for testing
-function quickFillDev() {
-  form.username = 'admin';
-  form.password = 'admin123';
-  error.value = '';
-}
 
 async function submit() {
   if (!form.username || !form.password) {

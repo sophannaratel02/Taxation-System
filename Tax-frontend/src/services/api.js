@@ -1,11 +1,16 @@
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000/api';
+const API_URL = (import.meta.env.VITE_API_URL || '/api').replace(/\/$/, '');
 
 async function request(path, options = {}) {
   const isFormData = typeof FormData !== 'undefined' && options.body instanceof FormData;
   const headers = { ...(isFormData ? {} : { 'Content-Type': 'application/json' }), ...(options.headers || {}) };
   const token = localStorage.getItem('tax_token');
   if (token) headers.Authorization = `Bearer ${token}`;
-  const response = await fetch(`${API_URL}${path}`, { ...options, headers });
+  let response;
+  try {
+    response = await fetch(`${API_URL}${path}`, { ...options, headers });
+  } catch {
+    throw new Error('Cannot connect to the API. Check that the backend is running and aPanel forwards /api to it.');
+  }
   const payload = await response.json().catch(() => ({}));
   if (response.status === 401) {
     localStorage.removeItem('tax_token');

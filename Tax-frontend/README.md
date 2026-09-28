@@ -36,3 +36,9 @@ npm run dev
 ```sh
 npm run build
 ```
+
+### Deploy Behind aPanel
+
+The production build calls the same-origin `/api` path. Configure the website reverse proxy so `/api/` is forwarded to the backend Node service (default port `4000`), preserving the `/api` prefix. Serve the contents of `dist/` as the website root and enable SPA fallback to `index.html` for routes such as `/login`.
+
+If the API is hosted on a separate domain, set `VITE_API_URL` to its full API base URL (for example `https://api.example.com/api`) before building, and set backend `CORS_ORIGIN` to the frontend origin. Rebuild after changing `VITE_API_URL`; it is embedded into the static bundle.
