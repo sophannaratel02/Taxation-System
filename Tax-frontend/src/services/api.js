@@ -1,120 +1,207 @@
-const API_URL = (import.meta.env.VITE_API_URL || '/api').replace(/\/$/, '');
+const API_URL = (import.meta.env?.VITE_API_URL || '/api').replace(/\/$/, '');
+
+// ============================================================================
+// Core Helpers
+// ============================================================================
+
+const param = (val) => encodeURIComponent(String(val));
+
+function getAuthHeader() {
+  const token = localStorage.getItem('tax_token');
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
+function buildQuery(params = {}) {
+  const filtered = Object.entries(params).filter(
+    ([, val]) => val !== undefined && val !== null && val !== ''
+  );
+  return filtered.length ? `?${new URLSearchParams(filtered).toString()}` : '';
+}
 
 async function request(path, options = {}) {
   const isFormData = typeof FormData !== 'undefined' && options.body instanceof FormData;
-  const headers = { ...(isFormData ? {} : { 'Content-Type': 'application/json' }), ...(options.headers || {}) };
-  const token = localStorage.getItem('tax_token');
-  if (token) headers.Authorization = `Bearer ${token}`;
+  
+  const headers = {
+    ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
+    ...getAuthHeader(),
+    ...(options.headers || {}),
+  };
+
   let response;
   try {
     response = await fetch(`${API_URL}${path}`, { ...options, headers });
-  } catch {
-    throw new Error('Cannot connect to the API. Check that the backend is running and aPanel forwards /api to it.');
+  } catch (err) {
+    throw new Error('Cannot connect to the API. Check your network or API server availability.', { cause: err });
   }
+
   const payload = await response.json().catch(() => ({}));
+
   if (response.status === 401) {
     localStorage.removeItem('tax_token');
     localStorage.removeItem('tax_user');
   }
-  if (!response.ok) throw new Error(payload.message || `Request failed (${response.status})`);
+
+  if (!response.ok) {
+    const errorMsg = payload.message || payload.error || `Request failed (${response.status})`;
+    const error = new Error(errorMsg);
+    error.status = response.status;
+    error.data = payload;
+    throw error;
+  }
+
   return payload;
 }
 
-async function downloadFile(id) {
-  const headers = {};
-  const token = localStorage.getItem('tax_token');
-  if (token) headers.Authorization = `Bearer ${token}`;
+// REST shorthand utilities
+const get   = (path, query)         => request(`${path}${buildQuery(query)}`);
+const post  = (path, body, headers) => request(path, { method: 'POST', body: body instanceof FormData ? body : JSON.stringify(body), headers });
+const put   = (path, body)          => request(path, { method: 'PUT', body: JSON.stringify(body) });
+const patch = (path, body)          => request(path, { method: 'PATCH', body: body ? JSON.stringify(body) : undefined });
+const del   = (path)                => request(path, { method: 'DELETE' });
 
-  const response = await fetch(`${API_URL}/files/${encodeURIComponent(id)}/download`, { headers });
+// ============================================================================
+// File Download Handler
+// ============================================================================
+
+async function downloadFile(id) {
+  const response = await fetch(`${API_URL}/files/${param(id)}/download`, {
+    headers: getAuthHeader(),
+  });
+
   if (!response.ok) {
     const payload = await response.json().catch(() => ({}));
     throw new Error(payload.message || `Download failed (${response.status})`);
+  }
+
+  let filename = `document-${id}`;
+  const disposition = response.headers.get('Content-Disposition');
+  if (disposition) {
+    // Matches filename*="utf-8''..." or filename="..."
+    const match = disposition.match(/filename\*?=(?:UTF-8'')?["']?([^;"'\n]+)["']?/i);
+    if (match?.[1]) filename = decodeURIComponent(match[1].trim());
   }
 
   const blob = await response.blob();
   const objectUrl = URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.href = objectUrl;
-  link.download = `document-${id}`;
-  document.body.append(link);
+  link.download = filename;
+  document.body.appendChild(link);
   link.click();
   link.remove();
   window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
 }
 
+// ============================================================================
+// API Client Interface
+// ============================================================================
+
 export const api = {
-  login: (username, password) => request('/auth/login', { method: 'POST', body: JSON.stringify({ username, password }) }),
-  register: (payload) => request('/auth/register', { method: 'POST', body: JSON.stringify(payload) }),
-  forgotPassword: (emailOrUsername) => request('/auth/forgot-password', { method: 'POST', body: JSON.stringify({ emailOrUsername }) }),
-  verifyOtp: (email, otp) => request('/auth/verify-otp', { method: 'POST', body: JSON.stringify({ email, otp }) }),
-  resetPassword: (payload) => request('/auth/reset-password', { method: 'POST', body: JSON.stringify(payload) }),
-  users: () => request('/users'),
-  saveUser: (payload) => request('/users', { method: 'POST', body: JSON.stringify(payload) }),
-  settings: () => request('/settings'),
-  saveSettings: (settings) => request('/settings', { method: 'PUT', body: JSON.stringify(settings) }),
-  policyNotes: () => request('/policy-notes'),
-  savePolicyNotes: (notes) => request('/admin/policy-notes', { method: 'PUT', body: JSON.stringify({ notes }) }),
-  deletePolicyNotes: () => request('/admin/policy-notes', { method: 'DELETE' }),
-  items: (search = '') => request(`/items?search=${encodeURIComponent(search)}`),
-  saveItem: (item) => request('/items', { method: 'POST', body: JSON.stringify(item) }),
-  updateItem: (id, item) => request(`/items/${id}`, { method: 'PUT', body: JSON.stringify(item) }),
-  deleteItem: (id) => request(`/items/${id}`, { method: 'DELETE' }),
-  vendors: () => request('/vendors'),
-  saveVendor: (vendor) => request('/vendors', { method: 'POST', body: JSON.stringify(vendor) }),
-  updateVendor: (id, vendor) => request(`/vendors/${id}`, { method: 'PUT', body: JSON.stringify(vendor) }),
-  deleteVendor: (id) => request(`/vendors/${id}`, { method: 'DELETE' }),
-  customers: () => request('/customers'),
-  saveCustomer: (customer) => request('/customers', { method: 'POST', body: JSON.stringify(customer) }),
-  updateCustomer: (id, customer) => request(`/customers/${id}`, { method: 'PUT', body: JSON.stringify(customer) }),
-  deleteCustomer: (id) => request(`/customers/${id}`, { method: 'DELETE' }),
-  purchaseOrders: () => request('/purchase-orders'),
-  savePurchaseOrder: (order) => request('/purchase-orders', { method: 'POST', body: JSON.stringify(order) }),
-  purchaseOrder: (id) => request(`/purchase-orders/${id}`),
-  updatePurchaseOrder: (id, order) => request(`/purchase-orders/${id}`, { method: 'PUT', body: JSON.stringify(order) }),
-  deletePurchaseOrder: (id) => request(`/purchase-orders/${id}`, { method: 'DELETE' }),
-  receivePurchaseOrder: (id, payload = {}) => request(`/purchase-orders/${id}/receive`, { method: 'POST', body: JSON.stringify(payload) }),
-  projects: () => request('/projects'),
-  saveProject: (project) => request('/projects', { method: 'POST', body: JSON.stringify(project) }),
-  projectFiles: (projectId) => request(`/projects/${projectId}/files`),
-  userFiles: () => request('/files'),
+  // Authentication
+  login: (username, password) => post('/auth/login', { username, password }),
+  register: (payload) => post('/auth/register', payload),
+  forgotPassword: (emailOrUsername) => post('/auth/forgot-password', { emailOrUsername }),
+  verifyOtp: (email, otp) => post('/auth/verify-otp', { email, otp }),
+  resetPassword: (payload) => post('/auth/reset-password', payload),
+
+  // User & Settings
+  users: () => get('/users'),
+  saveUser: (payload) => post('/users', payload),
+  settings: () => get('/settings'),
+  saveSettings: (settings) => put('/settings', settings),
+  policyNotes: () => get('/policy-notes'),
+  savePolicyNotes: (notes) => put('/admin/policy-notes', { notes }),
+  deletePolicyNotes: () => del('/admin/policy-notes'),
+
+  // Catalog & Entities
+  items: (search = '') => get('/items', { search }),
+  saveItem: (item) => post('/items', item),
+  updateItem: (id, item) => put(`/items/${param(id)}`, item),
+  deleteItem: (id) => del(`/items/${param(id)}`),
+
+  vendors: () => get('/vendors'),
+  saveVendor: (vendor) => post('/vendors', vendor),
+  updateVendor: (id, vendor) => put(`/vendors/${param(id)}`, vendor),
+  deleteVendor: (id) => del(`/vendors/${param(id)}`),
+
+  customers: () => get('/customers'),
+  saveCustomer: (customer) => post('/customers', customer),
+  updateCustomer: (id, customer) => put(`/customers/${param(id)}`, customer),
+  deleteCustomer: (id) => del(`/customers/${param(id)}`),
+
+  // Purchasing & Inventory
+  purchaseOrders: () => get('/purchase-orders'),
+  savePurchaseOrder: (order) => post('/purchase-orders', order),
+  purchaseOrder: (id) => get(`/purchase-orders/${param(id)}`),
+  updatePurchaseOrder: (id, order) => put(`/purchase-orders/${param(id)}`, order),
+  deletePurchaseOrder: (id) => del(`/purchase-orders/${param(id)}`),
+  receivePurchaseOrder: (id, payload = {}) => post(`/purchase-orders/${param(id)}/receive`, payload),
+  batches: () => get('/inventory/batches'),
+  saveBatch: (payload) => post('/inventory/batches', payload),
+  transfers: () => get('/inventory/transfers'),
+  saveTransfer: (payload) => post('/inventory/transfers', payload),
+  adjustStock: (payload) => post('/stock/adjustments', payload),
+
+  // POS & Sales
+  completeSale: (payload) => post('/sales', payload),
+  createKhqrIntent: (payload) => post('/khqr/intents', payload),
+  verifyKhqrIntent: (id) => post(`/khqr/intents/${param(id)}/verify`, {}),
+  currentRegister: (branch = '') => get('/register/current', { branch }),
+  openRegister: (payload) => post('/register/open', payload),
+  closeRegister: (payload) => post('/register/close', payload),
+  registerReport: (registerId) => get('/register/report', { registerId }),
+  managerOverride: (payload) => post('/manager/override', payload),
+
+  // Billing & Accounting
+  invoices: () => get('/invoices'),
+  invoice: (identifier) => get(`/invoices/${param(identifier)}`),
+  transactions: () => get('/transactions'),
+  collectArPayment: (payload) => post('/ar/payments', payload),
+  arSummary: () => get('/ar/summary'),
+  apSummary: () => get('/ap/summary'),
+  payAp: (payload) => post('/ap/payments', payload),
+  taxExportUrl: (kind, from = '', to = '') => `${API_URL}/reports/tax-export${buildQuery({ kind, from, to })}`,
+  taxPeriods: () => get('/tax-periods'),
+  createTaxPeriod: (payload) => post('/tax-periods', payload),
+  updateTaxPeriod: (id, payload) => put(`/tax-periods/${param(id)}`, payload),
+  taxSummary: (periodId) => get(`/tax-periods/${param(periodId)}/summary`),
+  taxRecords: (periodId, kind) => get(`/tax-periods/${param(periodId)}/${param(kind)}`),
+  monthlyWhtItems: (returnId) => get('/taxes/monthly/wht-items', { return_id: returnId }),
+  saveMonthlyWhtItems: (payload) => post('/taxes/monthly/wht-items', payload),
+  createTaxRecord: (periodId, kind, payload) => post(`/tax-periods/${param(periodId)}/${param(kind)}`, payload),
+  updateTaxRecord: (periodId, kind, recordId, payload) => put(`/tax-periods/${param(periodId)}/${param(kind)}/${param(recordId)}`, payload),
+  deleteTaxRecord: (periodId, kind, recordId) => del(`/tax-periods/${param(periodId)}/${param(kind)}/${param(recordId)}`),
+  annualTaxReturns: () => get('/annual-tax-returns'),
+  annualTaxReturn: (id) => get(`/annual-tax-returns/${param(id)}`),
+  createAnnualTaxReturn: (payload) => post('/annual-tax-returns', payload),
+  updateAnnualTaxReturn: (id, payload) => put(`/annual-tax-returns/${param(id)}`, payload),
+  salesByStaff: (from = '', to = '') => get('/reports/sales-by-staff', { from, to }),
+
+  // Projects & Files
+  projects: () => get('/projects'),
+  saveProject: (project) => post('/projects', project),
+  projectFiles: (projectId) => get(`/projects/${param(projectId)}/files`),
+  userFiles: () => get('/files'),
   uploadUserFile: (file) => {
     const body = new FormData();
     body.append('file', file);
-    return request('/files', { method: 'POST', body });
+    return post('/files', body);
   },
   downloadFile,
-  leaveRequests: () => request('/leave-requests'),
-  saveLeaveRequest: (leave) => request('/leave-requests', { method: 'POST', body: JSON.stringify(leave) }),
-  notifications: () => request('/notifications'),
-  markNotificationRead: (id) => request(`/notifications/${id}/read`, { method: 'PATCH' }),
-  adminUsers: () => request('/admin/users'),
-  updateAdminUser: (id, changes) => request(`/admin/users/${id}`, { method: 'PATCH', body: JSON.stringify(changes) }),
-  deleteAdminUser: (id) => request(`/admin/users/${id}`, { method: 'DELETE' }),
-  adminActivity: () => request('/admin/activity'),
-  adminFiles: () => request('/admin/files'),
-  reviewProject: (id, decision) => request(`/admin/projects/${id}/review`, { method: 'PATCH', body: JSON.stringify(decision) }),
-  reviewFile: (id, decision) => request(`/admin/files/${id}/review`, { method: 'PATCH', body: JSON.stringify(decision) }),
-  reviewLeave: (id, decision) => request(`/admin/leave-requests/${id}/review`, { method: 'PATCH', body: JSON.stringify(decision) }),
-  invoices: () => request('/invoices'),
-  invoice: (identifier) => request(`/invoices/${encodeURIComponent(identifier)}`),
-  salesByStaff: (from = '', to = '') => request(`/reports/sales-by-staff?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`),
-  transactions: () => request('/transactions'),
-  adjustStock: (payload) => request('/stock/adjustments', { method: 'POST', body: JSON.stringify(payload) }),
-  completeSale: (payload) => request('/sales', { method: 'POST', body: JSON.stringify(payload) }),
-  createKhqrIntent: (payload) => request('/khqr/intents', { method: 'POST', body: JSON.stringify(payload) }),
-  verifyKhqrIntent: (id) => request(`/khqr/intents/${encodeURIComponent(id)}/verify`, { method: 'POST', body: JSON.stringify({}) }),
-  currentRegister: (branch) => request(`/register/current?branch=${encodeURIComponent(branch || '')}`),
-  openRegister: (payload) => request('/register/open', { method: 'POST', body: JSON.stringify(payload) }),
-  closeRegister: (payload) => request('/register/close', { method: 'POST', body: JSON.stringify(payload) }),
-  registerReport: (id) => request(`/register/report?registerId=${encodeURIComponent(id)}`),
-  collectArPayment: (payload) => request('/ar/payments', { method: 'POST', body: JSON.stringify(payload) }),
-  arSummary: () => request('/ar/summary'),
-  apSummary: () => request('/ap/summary'),
-  payAp: (payload) => request('/ap/payments', { method: 'POST', body: JSON.stringify(payload) }),
-  taxExportUrl: (kind, from = '', to = '') => `${API_URL}/reports/tax-export?kind=${encodeURIComponent(kind)}&from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`,
-  batches: () => request('/inventory/batches'),
-  saveBatch: (payload) => request('/inventory/batches', { method: 'POST', body: JSON.stringify(payload) }),
-  transfers: () => request('/inventory/transfers'),
-  saveTransfer: (payload) => request('/inventory/transfers', { method: 'POST', body: JSON.stringify(payload) }),
-  managerOverride: (payload) => request('/manager/override', { method: 'POST', body: JSON.stringify(payload) }),
+
+  // HR & Notifications
+  leaveRequests: () => get('/leave-requests'),
+  saveLeaveRequest: (leave) => post('/leave-requests', leave),
+  notifications: () => get('/notifications'),
+  markNotificationRead: (id) => patch(`/notifications/${param(id)}/read`),
+
+  // Admin
+  adminUsers: () => get('/admin/users'),
+  updateAdminUser: (id, changes) => patch(`/admin/users/${param(id)}`, changes),
+  deleteAdminUser: (id) => del(`/admin/users/${param(id)}`),
+  adminActivity: () => get('/admin/activity'),
+  adminFiles: () => get('/admin/files'),
+  reviewProject: (id, decision) => patch(`/admin/projects/${param(id)}/review`, decision),
+  reviewFile: (id, decision) => patch(`/admin/files/${param(id)}/review`, decision),
+  reviewLeave: (id, decision) => patch(`/admin/leave-requests/${param(id)}/review`, decision),
 };

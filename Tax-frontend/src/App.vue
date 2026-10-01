@@ -253,6 +253,12 @@
           :class="$route.path.includes('/reports/tax-vat') ? '' : 'text-danger'">
           <i  class="bi bi-percent me-2" :class="$route.path.includes('/reports/tax-vat') ? 'text-success' : 'text-danger'"></i>  {{ language.t('taxReport') }}
             </router-link>
+            <router-link to="/tax/declaration" class="list-group-item list-group-item-action py-2 ps-4" active-class="active">
+              <i class="bi bi-journal-text me-2 text-secondary"></i> {{ language.isKhmer ? 'ប្រកាសពន្ធប្រចាំខែ' : 'M-Tax Declaration' }}
+            </router-link>
+            <router-link to="/tax/annual-filing" class="list-group-item list-group-item-action py-2 ps-4" active-class="active">
+              <i class="bi bi-file-earmark-spreadsheet me-2 text-secondary"></i> {{ language.isKhmer ? 'ប្រកាសពន្ធលើប្រាក់ចំណូលប្រចាំឆ្នាំ' : 'Annual Tax Filing (TOI)' }}
+            </router-link>
 
             <!-- System Settings -->
             <div class="menu-header">{{ language.t('settings') }}</div>

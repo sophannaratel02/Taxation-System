@@ -12,6 +12,7 @@
     </div>
 
     <div v-if="actionMessage" class="alert alert-success py-2">{{ actionMessage }}</div>
+    <div v-if="actionError" class="alert alert-danger py-2" role="alert">{{ actionError }}</div>
 
     <div v-if="formOpen" class="card border-0 shadow-sm mb-4">
       <div class="card-header bg-white d-flex justify-content-between align-items-center py-3">
@@ -99,10 +100,13 @@ const props = defineProps({
   formValues: { type: Array, default: () => [] },
   rowActions: { type: Boolean, default: false },
   editLabel: { type: String, default: 'Edit' },
+  deleteConfirmMessage: { type: String, default: 'Delete this record?' },
+  deleteSuccessMessage: { type: String, default: 'Record archived successfully.' },
   invoiceBackRoute: { type: String, default: '/sales/invoices' },
 });
 
 const actionMessage = ref('');
+const actionError = ref('');
 const formOpen = ref(false);
 const saving = ref(false);
 const formError = ref('');
@@ -119,12 +123,14 @@ function openForm(rowIndex = null) {
 }
 
 async function removeRow(rowIndex) {
-  if (!props.deleteAction || !window.confirm('Delete this customer?')) return;
+  if (!props.deleteAction || !window.confirm(props.deleteConfirmMessage)) return;
+  actionError.value = '';
+  actionMessage.value = '';
   try {
     await props.deleteAction(props.rowIds[rowIndex]);
-    actionMessage.value = 'Customer deleted successfully.';
+    actionMessage.value = props.deleteSuccessMessage;
   } catch (error) {
-    formError.value = error.message;
+    actionError.value = error.message;
   }
 }
 

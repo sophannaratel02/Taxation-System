@@ -143,6 +143,18 @@ const router = createRouter({
       meta: { title: 'របាយការណ៍ពន្ធអាករ | Tax Report (VAT)' },
     },
     {
+      path: '/tax/declaration',
+      name: 'TaxDeclaration',
+      component: () => import('@/views/tax/TaxDeclarationView.vue'),
+      meta: { title: 'Monthly Tax Declaration | Tax System' },
+    },
+    {
+      path: '/tax/annual-filing',
+      name: 'AnnualTaxFiling',
+      component: () => import('@/views/tax/AnnualTaxFilingView.vue'),
+      meta: { title: 'Annual Tax Filing | Tax System' },
+    },
+    {
       path: '/reports/sales-by-customer',
       name: 'SalesByCustomer',
       component: () => import('@/views/reports/AdditionalReportsView.vue'),

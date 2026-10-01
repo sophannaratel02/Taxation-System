@@ -38,7 +38,7 @@ export const useTaxStore = defineStore('tax', () => {
   async function saveCustomer(payload) { const customer = await api.saveCustomer(payload); customers.value.push(customer); return customer; }
   async function updateCustomer(id, payload) { const customer = await api.updateCustomer(id, payload); const index = customers.value.findIndex((entry) => entry.id === id); if (index !== -1) customers.value[index] = customer; return customer; }
   async function deleteCustomer(id) { await api.deleteCustomer(id); customers.value = customers.value.filter((customer) => customer.id !== id); }
-  async function savePurchaseOrder(payload) { const order = await api.savePurchaseOrder(payload); purchaseOrders.value.unshift(order); return order; }
+  async function savePurchaseOrder(payload) { const order = await api.savePurchaseOrder(payload); await initialize(); return order; }
   async function updatePurchaseOrder(id, payload) { const order = await api.updatePurchaseOrder(id, payload); await initialize(); return order; }
   async function deletePurchaseOrder(id) { await api.deletePurchaseOrder(id); purchaseOrders.value = purchaseOrders.value.filter((order) => order.id !== id); }
   function calculateAverageCost(item, purchasedQty, purchaseCost) { const onHand = Math.max(0, item.qtyOnHand); const currentCost = onHand > 0 ? item.averageCost : purchaseCost; const totalQty = onHand + purchasedQty; return totalQty > 0 ? ((onHand * currentCost) + (purchasedQty * purchaseCost)) / totalQty : purchaseCost; }

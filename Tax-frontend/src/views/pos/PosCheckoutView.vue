@@ -1,6 +1,6 @@
 <template>
   <section class="container-fluid p-4 page-canvas pos-screen">
-    <!-- Header -->
+    <!-- Screen Header -->
     <header class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-end gap-3 mb-4">
       <div>
         <div class="eyebrow text-uppercase small fw-bold mb-1">
@@ -26,7 +26,7 @@
       </div>
     </header>
 
-    <!-- Alert Notification -->
+    <!-- Global Notice Banner -->
     <Transition name="fade">
       <div
         v-if="notice"
@@ -37,18 +37,12 @@
         role="alert"
       >
         <span>
-          <i
-            :class="
-              noticeType === 'danger'
-                ? 'bi bi-exclamation-triangle-fill me-2'
-                : 'bi bi-check-circle-fill me-2'
-            "
-          ></i>
+          <i :class="['me-2 bi', noticeType === 'danger' ? 'bi-exclamation-triangle-fill' : 'bi-check-circle-fill']"></i>
           {{ notice }}
         </span>
         <button
-          class="btn-close"
           type="button"
+          class="btn-close"
           aria-label="Close"
           @click="notice = ''"
         ></button>
@@ -56,9 +50,9 @@
     </Transition>
 
     <div class="row g-4 align-items-start">
-      <!-- Left Column: Search & Cart Table -->
+      <!-- Left Column: Search & Cart -->
       <div class="col-xl-8">
-        <!-- Barcode & Product Search Card -->
+        <!-- Barcode / Search Box -->
         <div class="card pos-card border-0 mb-3">
           <div class="card-body p-3 p-lg-4">
             <label for="barcodeSearchInput" class="form-label fw-semibold mb-2 d-flex align-items-center justify-content-between">
@@ -78,6 +72,7 @@
                   id="barcodeSearchInput"
                   ref="searchInput"
                   v-model="search"
+                  type="text"
                   class="form-control border-start-0 border-end-0 shadow-none ps-0"
                   :placeholder="language.t('scanPlaceholder')"
                   autocomplete="off"
@@ -107,7 +102,7 @@
                 </button>
               </div>
 
-              <!-- Search Suggestions Dropdown -->
+              <!-- Suggestions Dropdown -->
               <div
                 v-if="search.trim() && searchResults.length"
                 class="list-group search-dropdown shadow-lg"
@@ -115,15 +110,13 @@
                 <button
                   v-for="item in searchResults"
                   :key="item.id"
-                  class="list-group-item list-group-item-action d-flex justify-content-between align-items-center gap-3 py-2.5 px-3"
                   type="button"
+                  class="list-group-item list-group-item-action d-flex justify-content-between align-items-center gap-3 py-2.5 px-3"
                   @click="addItem(item)"
                 >
                   <div class="min-width-0 text-start">
-                    <strong class="d-block text-truncate product-title">
-                      {{ item.nameEn }}
-                    </strong>
-                    <small class="d-block text-muted text-truncate khmer-text" lang="km">
+                    <strong class="d-block text-truncate product-title">{{ item.nameEn }}</strong>
+                    <small class="d-block text-muted text-truncate" lang="km">
                       {{ item.nameKh || item.nameKm || '—' }}
                       <span class="barcode-badge ms-1">{{ item.barcode || 'No barcode' }}</span>
                     </small>
@@ -172,14 +165,14 @@
             <table class="table align-middle mb-0 pos-table">
               <thead>
                 <tr>
-                  <th class="ps-3 ps-lg-4" style="width: 45px">#</th>
+                  <th class="ps-3 ps-lg-4 text-center" style="width: 48px">#</th>
                   <th>{{ language.t('item') }}</th>
                   <th style="width: 90px">{{ language.t('unit') }}</th>
                   <th class="text-center" style="width: 120px">{{ language.t('quantity') }}</th>
-                  <th class="text-end" style="width: 115px">{{ language.t('price') }}</th>
+                  <th class="text-end" style="width: 110px">{{ language.t('price') }}</th>
                   <th class="text-end" style="width: 125px">{{ language.t('discount') }}</th>
                   <th class="text-end" style="width: 125px">{{ language.t('amount') }}</th>
-                  <th style="width: 55px"></th>
+                  <th class="text-center" style="width: 50px"></th>
                 </tr>
               </thead>
 
@@ -189,21 +182,18 @@
                   :key="line.itemId || index"
                   class="cart-row"
                 >
-                  <td class="ps-3 ps-lg-4 text-muted index-cell">{{ index + 1 }}</td>
-
+                  <td class="ps-3 ps-lg-4 text-center text-muted index-cell">{{ index + 1 }}</td>
                   <td>
                     <strong class="d-block text-dark item-name">{{ line.nameEn }}</strong>
-                    <small class="d-block text-muted khmer-text" lang="km">
+                    <small class="d-block text-muted" lang="km">
                       {{ line.nameKh || line.nameKm || '—' }}
                     </small>
                   </td>
-
                   <td>
                     <span class="badge unit-badge">
                       {{ line.unit || line.baseUnit || 'unit' }}
                     </span>
                   </td>
-
                   <td>
                     <div class="qty-control d-flex align-items-center justify-content-center">
                       <input
@@ -216,11 +206,9 @@
                       />
                     </div>
                   </td>
-
                   <td class="text-end fw-semibold text-secondary tabular-nums">
                     ${{ money(line.unitPrice) }}
                   </td>
-
                   <td>
                     <div class="input-group input-group-sm">
                       <span class="input-group-text bg-light">$</span>
@@ -234,15 +222,13 @@
                       />
                     </div>
                   </td>
-
                   <td class="text-end fw-bold text-primary tabular-nums">
                     ${{ money(lineTotal(line)) }}
                   </td>
-
                   <td class="text-center">
                     <button
-                      class="btn btn-sm delete-btn"
                       type="button"
+                      class="btn btn-sm delete-btn"
                       :title="language.isKhmer ? 'លុបចេញ' : 'Remove item'"
                       @click="tax.removeFromCart(index)"
                     >
@@ -251,7 +237,7 @@
                   </td>
                 </tr>
 
-                <!-- Empty Cart State -->
+                <!-- Empty State -->
                 <tr v-if="!tax.cart.length">
                   <td colspan="8" class="text-center py-5">
                     <div class="empty-cart">
@@ -263,8 +249,8 @@
                       </h6>
                       <p class="text-muted small mb-0">
                         {{ language.isKhmer 
-                          ? 'សូមស្កេនបាកូដ ឬស្វែងរកឈ្មោះទំនិញនៅខាងលើ។' 
-                          : 'Scan a barcode or search for a product above.' 
+                            ? 'សូមស្កេនបាកូដ ឬស្វែងរកឈ្មោះទំនិញនៅខាងលើ។' 
+                            : 'Scan a barcode or search for a product above.' 
                         }}
                       </p>
                     </div>
@@ -276,9 +262,10 @@
         </div>
       </div>
 
-      <!-- Right Column: Payment & Checkout Summary -->
+      <!-- Right Column: Checkout -->
       <div class="col-xl-4">
         <div class="card checkout-card border-0 sticky-xl-top">
+          <!-- Checkout Header -->
           <div class="checkout-header">
             <div>
               <div class="checkout-kicker text-uppercase small">
@@ -294,16 +281,14 @@
           </div>
 
           <div class="card-body p-3 p-lg-4">
-            <!-- Totals Overview -->
+            <!-- Price Summary -->
             <div class="summary-row">
               <span class="text-muted">{{ language.t('netSale') }}</span>
               <strong class="tabular-nums text-dark">${{ money(tax.cartNetSale) }}</strong>
             </div>
 
             <div class="summary-row border-bottom pb-2 mb-2">
-              <span class="text-muted">
-                VAT ({{ Number(tax.settings?.vatRate) || 0 }}%)
-              </span>
+              <span class="text-muted">VAT ({{ Number(tax.settings?.vatRate) || 0 }}%)</span>
               <strong class="tabular-nums text-danger">${{ money(tax.cartVat) }}</strong>
             </div>
 
@@ -318,11 +303,11 @@
                 {{ language.t('khrTotal') }}
               </span>
               <strong class="tabular-nums text-dark">
-                {{ Math.round(tax.cartTotal * exchangeRate).toLocaleString() }} ៛
+                {{ Math.round((tax.cartTotal || 0) * exchangeRate).toLocaleString() }} ៛
               </strong>
             </div>
 
-            <!-- Customer Selection -->
+            <!-- Customer Picker -->
             <label for="customerSelect" class="form-label small fw-semibold text-dark">
               {{ language.t('customer') }}
             </label>
@@ -345,21 +330,18 @@
             <label class="form-label small fw-semibold text-dark mb-2">
               {{ language.t('paymentMethod') }}
             </label>
-
             <div class="row g-2 mb-3">
               <div
-                v-for="method in methods"
+                v-for="method in paymentMethods"
                 :key="method.value"
                 class="col-4"
               >
                 <button
+                  type="button"
                   :class="[
                     'payment-method btn w-100',
-                    paymentMethod === method.value
-                      ? 'active'
-                      : 'btn-outline-secondary'
+                    paymentMethod === method.value ? 'active' : 'btn-outline-secondary'
                   ]"
-                  type="button"
                   @click="selectPaymentMethod(method.value)"
                 >
                   <i :class="method.icon"></i>
@@ -368,7 +350,7 @@
               </div>
             </div>
 
-            <!-- KHQR Terminal Panel -->
+            <!-- KHQR Display (Bank Mode) -->
             <div v-if="paymentMethod === 'bank'" class="khqr-panel mb-3">
               <div class="khqr-ribbon d-flex align-items-center justify-content-between">
                 <span><i class="bi bi-qr-code me-1"></i>ABA PayWay · KHQR</span>
@@ -382,10 +364,11 @@
                     v-else-if="khqrImageUrl"
                     :src="khqrImageUrl"
                     class="khqr-image"
-                    alt="KHQR payment code"
+                    alt="KHQR Code"
                   />
                   <i v-else class="bi bi-qr-code khqr-empty"></i>
                 </div>
+
                 <div class="min-width-0 flex-grow-1">
                   <strong class="d-block text-dark lh-sm">
                     {{ language.isKhmer ? 'ស្កេន KHQR ដើម្បីទូទាត់' : 'Scan KHQR to pay' }}
@@ -393,9 +376,9 @@
                   <small class="text-muted d-block mt-0.5">
                     {{ language.isKhmer ? 'ពិនិត្យចំនួនទឹកប្រាក់មុនពេលបញ្ជាក់។' : 'Verify amount before confirming.' }}
                   </small>
-                  
+
                   <div class="d-flex align-items-center gap-2 mt-2">
-                    <select v-model="qrCurrency" class="form-select form-select-sm currency-select" aria-label="KHQR currency">
+                    <select v-model="qrCurrency" class="form-select form-select-sm currency-select" aria-label="KHQR Currency">
                       <option value="USD">USD ($)</option>
                       <option value="KHR">KHR (៛)</option>
                     </select>
@@ -408,39 +391,38 @@
                     {{ khqrMerchantName }} · ABA PayWay
                   </small>
 
+                  <!-- Intent Verification Status Indicator -->
                   <div
                     v-if="khqrIntentId"
                     class="mt-2 py-1 px-2 rounded-2 small d-inline-flex align-items-center gap-1.5"
-                    :class="khqrStatus === 'paid' ? 'bg-success-subtle text-success fw-semibold' : khqrStatus === 'error' ? 'bg-danger-subtle text-danger fw-semibold' : 'bg-light text-muted'"
+                    :class="khqrStatusInfo.className"
                   >
-                    <i :class="khqrStatus === 'paid' ? 'bi bi-check-circle-fill' : 'bi bi-clock-history'"></i>
-                    <span>
-                      {{ khqrStatus === 'paid' ? 'Payment verified' : khqrStatus === 'expired' ? 'QR expired' : khqrStatus === 'error' ? 'Verification unavailable' : 'Waiting for payment confirmation' }}
-                    </span>
+                    <i :class="khqrStatusInfo.icon"></i>
+                    <span>{{ khqrStatusInfo.text }}</span>
                   </div>
                   <small v-if="khqrError" class="d-block text-danger mt-1">{{ khqrError }}</small>
 
-                  <div class="d-flex flex-wrap gap-1.5 mt-2.5">
+                  <div class="d-flex flex-wrap gap-2 mt-2.5">
                     <button
-                      class="btn btn-xs btn-outline-dark"
                       type="button"
+                      class="btn btn-xs btn-outline-dark"
                       :disabled="khqrLoading || !khqrPayload"
                       @click="copyKhqr"
                     >
                       <i class="bi bi-copy me-1"></i>Copy
                     </button>
                     <button
-                      class="btn btn-xs btn-outline-primary"
                       type="button"
+                      class="btn btn-xs btn-outline-primary"
                       :disabled="khqrLoading || khqrChecking || !khqrIntentId || khqrStatus === 'paid'"
                       @click="verifyKhqr(true)"
                     >
-                      <i :class="khqrChecking ? 'bi bi-arrow-repeat spin' : 'bi bi-check2-circle'" class="me-1"></i>
+                      <i :class="['me-1 bi', khqrChecking ? 'bi-arrow-repeat spin' : 'bi-check2-circle']"></i>
                       {{ khqrChecking ? 'Checking...' : 'Check' }}
                     </button>
                     <button
-                      class="btn btn-xs btn-outline-secondary"
                       type="button"
+                      class="btn btn-xs btn-outline-secondary"
                       :disabled="khqrLoading"
                       @click="refreshKhqr"
                     >
@@ -451,7 +433,7 @@
               </div>
             </div>
 
-            <!-- Cash Tender Inputs -->
+            <!-- Cash Tender Inputs (Cash Mode) -->
             <div v-if="paymentMethod === 'cash'" class="payment-inputs">
               <div class="row g-2">
                 <div class="col-6">
@@ -494,34 +476,25 @@
                 <strong class="tabular-nums">{{ Math.round(Number(receivedKhr) || 0).toLocaleString() }} ៛</strong>
               </div>
 
-              <!-- Change / Due Box with KHR conversion -->
-              <div
-                class="change-box mt-3"
-                :class="canPay ? 'is-paid' : 'is-due'"
-              >
+              <!-- Balance / Due Pill -->
+              <div class="change-box mt-3" :class="canPay ? 'is-paid' : 'is-due'">
                 <div>
                   <small class="d-block text-uppercase fw-semibold opacity-75">
                     {{ canPay ? language.t('changeDue') : language.t('amountDue') }}
                   </small>
                   <strong class="tabular-nums fs-4">
-                    ${{ money(canPay ? changeDue : amountDue) }}
-                    <span v-if="canPay ? changeDue > 0 : amountDue > 0" class="fs-6 opacity-75 fw-normal ms-1">
-                      ({{ Math.round((canPay ? changeDue : amountDue) * exchangeRate).toLocaleString() }} ៛)
+                    ${{ money(activeCashDifference) }}
+                    <span v-if="activeCashDifference > 0" class="fs-6 opacity-75 fw-normal ms-1">
+                      ({{ Math.round(activeCashDifference * exchangeRate).toLocaleString() }} ៛)
                     </span>
                   </strong>
                 </div>
-                <i
-                  :class="
-                    canPay
-                      ? 'bi bi-check-circle-fill'
-                      : 'bi bi-exclamation-circle-fill'
-                  "
-                ></i>
+                <i :class="['bi', canPay ? 'bi-check-circle-fill' : 'bi-exclamation-circle-fill']"></i>
               </div>
             </div>
 
-            <!-- Non-Cash Notice -->
-            <div v-else class="non-cash-note">
+            <!-- Alternative / Non-Cash Note -->
+            <div v-else-if="paymentMethod !== 'bank'" class="non-cash-note">
               <i class="bi bi-info-circle-fill me-2 text-primary"></i>
               <span>
                 {{ language.isKhmer ? 'ការទូទាត់នឹងត្រូវកត់ត្រាជា' : 'Payment will be recorded as' }}
@@ -529,32 +502,25 @@
               </span>
             </div>
 
-            <!-- Actions -->
+            <!-- Submit Buttons -->
             <div class="d-grid gap-2 mt-4">
               <button
-                class="btn btn-success btn-lg complete-btn"
                 type="button"
+                class="btn btn-success btn-lg complete-btn"
                 :disabled="!tax.cart.length || !canPay || processing"
                 @click="completeSale"
               >
-                <span
-                  v-if="processing"
-                  class="spinner-border spinner-border-sm me-2"
-                  aria-hidden="true"
-                ></span>
-                <i
-                  v-else
-                  class="bi bi-check2-circle me-2"
-                ></i>
+                <span v-if="processing" class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>
+                <i v-else class="bi bi-check2-circle me-2"></i>
                 {{ processing 
-                  ? (language.isKhmer ? 'កំពុងដំណើរការ...' : 'Processing...') 
-                  : (language.isKhmer ? 'ទូទាត់ការលក់' : 'Complete Sale') 
+                    ? (language.isKhmer ? 'កំពុងដំណើរការ...' : 'Processing...') 
+                    : (language.isKhmer ? 'ទូទាត់ការលក់' : 'Complete Sale') 
                 }}
               </button>
 
               <button
-                class="btn btn-light text-secondary border clear-btn"
                 type="button"
+                class="btn btn-light text-secondary border clear-btn"
                 :disabled="!tax.cart.length || processing"
                 @click="clearCart"
               >
@@ -567,7 +533,7 @@
       </div>
     </div>
 
-    <!-- 80mm ESC/POS Receipt Host for Thermal Printing -->
+    <!-- ESC/POS Thermal Receipt Host (80mm) -->
     <div v-if="printReceipt" class="receipt-print-host">
       <ThermalReceipt40Col
         :company="printReceipt.company"
@@ -594,24 +560,25 @@ import ThermalReceipt40Col from '@/components/receipt/ThermalReceipt40Col.vue';
 import { printThermalReceipt } from '@/utils/thermalPrint';
 import { api } from '@/services/api';
 
+// Stores
 const tax = useTaxStore();
 const language = useLanguageStore();
 
+// UI States
 const search = ref('');
 const searchInput = ref(null);
 const notice = ref('');
 const noticeType = ref('success');
+const processing = ref(false);
+const printReceipt = ref(null);
+
+// Payment States
 const selectedCustomerId = ref(null);
 const paymentMethod = ref('cash');
 const receivedUsd = ref(0);
 const receivedKhr = ref(0);
-const printReceipt = ref(null);
-const processing = ref(false);
 
-const selectedCustomer = computed(() => (tax.customers || []).find((customer) => customer.id === selectedCustomerId.value) || null);
-const customerName = computed(() => selectedCustomer.value?.name || 'Walk-in customer');
-const customerCreditBlocked = computed(() => paymentMethod.value === 'customer_account' && !selectedCustomer.value);
-
+// KHQR States & Polling
 const khqrPayload = ref('');
 const khqrImageUrl = ref('');
 const khqrIntentId = ref('');
@@ -620,95 +587,39 @@ const khqrLoading = ref(false);
 const khqrChecking = ref(false);
 const khqrError = ref('');
 const qrCurrency = ref('USD');
+
 let qrGeneration = 0;
-let khqrCheckTimer;
+let khqrCheckTimer = null;
+let noticeTimer = null;
+let printTimer = null;
 
-async function refreshKhqr() {
-  window.clearTimeout(khqrCheckTimer);
-  if (paymentMethod.value !== 'bank' || Number(tax.cartTotal) <= 0) {
-    qrGeneration += 1;
-    khqrPayload.value = '';
-    khqrImageUrl.value = '';
-    khqrIntentId.value = '';
-    khqrStatus.value = '';
-    return;
-  }
-  const generation = ++qrGeneration;
-  khqrLoading.value = true;
-  khqrError.value = '';
-  khqrStatus.value = 'creating';
-  try {
-    const result = await api.createKhqrIntent({
-      amount: qrCurrency.value === 'KHR' ? Math.round(tax.cartTotal * exchangeRate.value) : tax.cartTotal,
-      currency: qrCurrency.value,
-    });
-    if (generation === qrGeneration) {
-      khqrPayload.value = result.payload;
-      khqrImageUrl.value = result.image;
-      khqrIntentId.value = result.id;
-      khqrStatus.value = 'pending';
-      scheduleKhqrCheck(result.id, generation);
-    }
-  } catch (error) {
-    if (generation === qrGeneration) {
-      khqrPayload.value = '';
-      khqrImageUrl.value = '';
-      khqrIntentId.value = '';
-      khqrStatus.value = 'error';
-      khqrError.value = error?.message || 'Unable to generate KHQR';
-    }
-  } finally {
-    if (generation === qrGeneration) khqrLoading.value = false;
-  }
-}
+// ==========================================
+// Computed Properties
+// ==========================================
+const exchangeRate = computed(() => Number(tax.settings?.exchangeRate) || 4000);
 
-function scheduleKhqrCheck(intentId, generation) {
-  window.clearTimeout(khqrCheckTimer);
-  khqrCheckTimer = window.setTimeout(async () => {
-    if (intentId !== khqrIntentId.value || generation !== qrGeneration) return;
-    const status = await verifyKhqr(false);
-    if (status === 'pending') scheduleKhqrCheck(intentId, generation);
-  }, 4000);
-}
+const selectedCustomer = computed(() => 
+  (tax.customers || []).find((c) => c.id === selectedCustomerId.value) || null
+);
 
-async function verifyKhqr(manual = false) {
-  if (!khqrIntentId.value || khqrChecking.value) return '';
-  if (manual) window.clearTimeout(khqrCheckTimer);
-  const checkedIntent = khqrIntentId.value;
-  khqrChecking.value = true;
-  khqrError.value = '';
-  try {
-    const result = await api.verifyKhqrIntent(checkedIntent);
-    if (checkedIntent !== khqrIntentId.value) return '';
-    khqrStatus.value = result.status;
-    if (result.status === 'paid') {
-      showNotice('Payment verified. Completing the sale and printing the receipt.');
-      await completeSale();
-    }
-    if (result.status === 'expired') khqrError.value = 'This payment request expired. Refresh the QR to try again.';
-    if (manual && result.status === 'pending') scheduleKhqrCheck(checkedIntent, qrGeneration);
-    return result.status;
-  } catch (error) {
-    if (checkedIntent === khqrIntentId.value) {
-      khqrStatus.value = 'error';
-      khqrError.value = error?.message || 'Unable to verify payment';
-    }
-    return 'error';
-  } finally {
-    khqrChecking.value = false;
-  }
-}
+const customerName = computed(() => selectedCustomer.value?.name || 'Walk-in customer');
 
-const khqrMerchantName = computed(() => tax.settings?.khqrMerchantName || tax.settings?.companyName || 'Merchant');
+const customerCreditBlocked = computed(() => 
+  paymentMethod.value === 'customer_account' && !selectedCustomer.value
+);
 
-const methods = computed(() => [
+const paymentMethods = computed(() => [
   { value: 'cash', label: language.t('cash'), icon: 'bi bi-cash-stack' },
   { value: 'bank', label: language.t('cardQr'), icon: 'bi bi-qr-code-scan' },
   { value: 'customer_account', label: language.t('account'), icon: 'bi bi-person-vcard' },
 ]);
 
-const exchangeRate = computed(
-  () => Number(tax.settings?.exchangeRate) || 4000
+const selectedPaymentLabel = computed(() => 
+  paymentMethods.value.find((m) => m.value === paymentMethod.value)?.label || 'Payment'
+);
+
+const khqrMerchantName = computed(() => 
+  tax.settings?.khqrMerchantName || tax.settings?.companyName || 'Merchant'
 );
 
 const searchResults = computed(() => {
@@ -717,17 +628,11 @@ const searchResults = computed(() => {
 
   return (tax.items || [])
     .filter((item) => {
-      const searchable = [
-        item.nameEn,
-        item.nameKh,
-        item.nameKm,
-        item.barcode,
-      ]
+      const searchTarget = [item.nameEn, item.nameKh, item.nameKm, item.barcode]
         .filter(Boolean)
         .join(' ')
         .toLowerCase();
-
-      return searchable.includes(query);
+      return searchTarget.includes(query);
     })
     .slice(0, 6);
 });
@@ -735,7 +640,6 @@ const searchResults = computed(() => {
 const totalTenderedUsd = computed(() => {
   const usd = Math.max(0, Number(receivedUsd.value) || 0);
   const khr = Math.max(0, Number(receivedKhr.value) || 0);
-
   return usd + (khr / exchangeRate.value);
 });
 
@@ -749,77 +653,100 @@ const changeDue = computed(() => {
   return diff > 0 ? Math.round(diff * 100) / 100 : 0;
 });
 
+const activeCashDifference = computed(() => canPay.value ? changeDue.value : amountDue.value);
+
 const canPay = computed(() => {
   if (!tax.cart.length || customerCreditBlocked.value) return false;
-  if (paymentMethod.value === 'bank') return khqrStatus.value === 'paid' && Boolean(khqrIntentId.value);
+  if (paymentMethod.value === 'bank') {
+    return khqrStatus.value === 'paid' && Boolean(khqrIntentId.value);
+  }
   if (paymentMethod.value !== 'cash') return true;
   return totalTenderedUsd.value >= (Number(tax.cartTotal || 0) - 0.001);
 });
 
-const selectedPaymentLabel = computed(() => {
-  return methods.value.find((m) => m.value === paymentMethod.value)?.label || 'Payment';
+const khqrStatusInfo = computed(() => {
+  switch (khqrStatus.value) {
+    case 'paid':
+      return {
+        className: 'bg-success-subtle text-success fw-semibold',
+        icon: 'bi bi-check-circle-fill',
+        text: 'Payment verified',
+      };
+    case 'expired':
+      return {
+        className: 'bg-warning-subtle text-warning fw-semibold',
+        icon: 'bi bi-exclamation-triangle',
+        text: 'QR expired',
+      };
+    case 'error':
+      return {
+        className: 'bg-danger-subtle text-danger fw-semibold',
+        icon: 'bi bi-x-circle',
+        text: 'Verification unavailable',
+      };
+    default:
+      return {
+        className: 'bg-light text-muted',
+        icon: 'bi bi-clock-history',
+        text: 'Waiting for payment confirmation',
+      };
+  }
 });
 
-function money(value) {
-  return (Number(value) || 0).toFixed(2);
+// ==========================================
+// Methods: Math & Catalog
+// ==========================================
+function money(val) {
+  return (Number(val) || 0).toFixed(2);
 }
 
 function lineTotal(line) {
   const qty = Math.max(0, Number(line.qty) || 0);
-  const unitPrice = Math.max(0, Number(line.unitPrice) || 0);
+  const price = Math.max(0, Number(line.unitPrice) || 0);
   const discount = Math.max(0, Number(line.discount) || 0);
-
-  return Math.max(0, (unitPrice * qty) - discount);
+  return Math.max(0, (price * qty) - discount);
 }
 
 function showNotice(message, type = 'success') {
   notice.value = message;
   noticeType.value = type;
-
-  window.clearTimeout(showNotice.timer);
-  showNotice.timer = window.setTimeout(() => {
+  window.clearTimeout(noticeTimer);
+  noticeTimer = window.setTimeout(() => {
     notice.value = '';
   }, 4000);
 }
 
 function validateLineQty(line) {
   const available = Number(line.available);
-
   if (!Number.isFinite(Number(line.qty)) || Number(line.qty) < 1) {
     line.qty = 1;
   }
-
   if (available > 0 && Number(line.qty) > available) {
     line.qty = available;
     showNotice(
       language.isKhmer 
-        ? `ទំនិញនេះនៅសល់ត្រឹមតែ ${available} ប៉ុណ្ណោះ។`
-        : `Only ${available} unit(s) are available.`, 
+        ? `ទំនិញនេះនៅសល់ត្រឹមតែ ${available} ប៉ុណ្ណោះ។` 
+        : `Only ${available} unit(s) are available.`,
       'danger'
     );
   }
 }
 
 function validateLineDiscount(line) {
-  const maxDiscount = Math.max(
-    0,
-    (Number(line.unitPrice) || 0) * (Number(line.qty) || 0)
-  );
+  const maxDiscount = (Number(line.unitPrice) || 0) * (Number(line.qty) || 0);
   const discount = Math.max(0, Number(line.discount) || 0);
   line.discount = Math.min(discount, maxDiscount);
 }
 
 function addItem(item) {
   const stock = Number(item.qtyOnHand) || 0;
-  const displayName = language.isKhmer && (item.nameKh || item.nameKm) 
-    ? (item.nameKh || item.nameKm) 
+  const displayName = language.isKhmer && (item.nameKh || item.nameKm)
+    ? (item.nameKh || item.nameKm)
     : item.nameEn;
 
   if (stock <= 0) {
     showNotice(
-      language.isKhmer 
-        ? `ទំនិញ "${displayName}" អស់ពីស្តុកហើយ។` 
-        : `"${displayName}" is out of stock.`,
+      language.isKhmer ? `ទំនិញ "${displayName}" អស់ពីស្តុកហើយ។` : `"${displayName}" is out of stock.`,
       'danger'
     );
     return;
@@ -827,26 +754,31 @@ function addItem(item) {
 
   tax.addToCart(item);
   search.value = '';
-
-  nextTick(() => {
-    searchInput.value?.focus();
-  });
+  nextTick(() => searchInput.value?.focus());
 }
 
 function addSearchResult() {
-  const exactMatch = searchResults.value.find(
+  const exact = searchResults.value.find(
     (item) => String(item.barcode || '').trim().toLowerCase() === search.value.trim().toLowerCase()
   );
+  const target = exact || searchResults.value[0];
 
-  const item = exactMatch || searchResults.value[0];
-
-  if (item) {
-    addItem(item);
+  if (target) {
+    addItem(target);
   } else {
     showNotice(language.t('noMatchingItem'), 'danger');
   }
 }
 
+function clearCart() {
+  tax.clearCart();
+  receivedUsd.value = 0;
+  receivedKhr.value = 0;
+}
+
+// ==========================================
+// Methods: Payments & KHQR
+// ==========================================
 function selectPaymentMethod(method) {
   paymentMethod.value = method;
   if (method !== 'cash') {
@@ -856,19 +788,92 @@ function selectPaymentMethod(method) {
   refreshKhqr();
 }
 
-watch(
-  [
-    () => tax.cartTotal,
-    paymentMethod,
-    qrCurrency,
-    exchangeRate,
-    () => tax.settings?.khqrAccount,
-    () => tax.settings?.khqrMerchantName
-  ],
-  refreshKhqr
-);
+async function refreshKhqr() {
+  window.clearTimeout(khqrCheckTimer);
+  if (paymentMethod.value !== 'bank' || Number(tax.cartTotal) <= 0) {
+    qrGeneration++;
+    resetKhqrState();
+    return;
+  }
 
-onBeforeUnmount(() => window.clearTimeout(khqrCheckTimer));
+  const currentGen = ++qrGeneration;
+  khqrLoading.value = true;
+  khqrError.value = '';
+  khqrStatus.value = 'creating';
+
+  try {
+    const amount = qrCurrency.value === 'KHR' 
+      ? Math.round(tax.cartTotal * exchangeRate.value) 
+      : tax.cartTotal;
+
+    const result = await api.createKhqrIntent({ amount, currency: qrCurrency.value });
+
+    if (currentGen === qrGeneration) {
+      khqrPayload.value = result.payload;
+      khqrImageUrl.value = result.image;
+      khqrIntentId.value = result.id;
+      khqrStatus.value = 'pending';
+      scheduleKhqrCheck(result.id, currentGen);
+    }
+  } catch (error) {
+    if (currentGen === qrGeneration) {
+      resetKhqrState();
+      khqrStatus.value = 'error';
+      khqrError.value = error?.message || 'Unable to generate KHQR';
+    }
+  } finally {
+    if (currentGen === qrGeneration) khqrLoading.value = false;
+  }
+}
+
+function resetKhqrState() {
+  khqrPayload.value = '';
+  khqrImageUrl.value = '';
+  khqrIntentId.value = '';
+  khqrStatus.value = '';
+}
+
+function scheduleKhqrCheck(intentId, gen) {
+  window.clearTimeout(khqrCheckTimer);
+  khqrCheckTimer = window.setTimeout(async () => {
+    if (intentId !== khqrIntentId.value || gen !== qrGeneration) return;
+    const status = await verifyKhqr(false);
+    if (status === 'pending') scheduleKhqrCheck(intentId, gen);
+  }, 4000);
+}
+
+async function verifyKhqr(manual = false) {
+  if (!khqrIntentId.value || khqrChecking.value) return '';
+  if (manual) window.clearTimeout(khqrCheckTimer);
+
+  const targetId = khqrIntentId.value;
+  khqrChecking.value = true;
+  khqrError.value = '';
+
+  try {
+    const result = await api.verifyKhqrIntent(targetId);
+    if (targetId !== khqrIntentId.value) return '';
+
+    khqrStatus.value = result.status;
+    if (result.status === 'paid') {
+      showNotice('Payment verified. Completing sale...');
+      await completeSale();
+    } else if (result.status === 'expired') {
+      khqrError.value = 'This payment request expired. Refresh QR.';
+    } else if (manual && result.status === 'pending') {
+      scheduleKhqrCheck(targetId, qrGeneration);
+    }
+    return result.status;
+  } catch (error) {
+    if (targetId === khqrIntentId.value) {
+      khqrStatus.value = 'error';
+      khqrError.value = error?.message || 'Unable to verify payment';
+    }
+    return 'error';
+  } finally {
+    khqrChecking.value = false;
+  }
+}
 
 async function copyKhqr() {
   if (!khqrPayload.value) return;
@@ -876,33 +881,34 @@ async function copyKhqr() {
   showNotice('KHQR payload copied to clipboard.');
 }
 
-function clearCart() {
-  tax.clearCart();
-  receivedUsd.value = 0;
-  receivedKhr.value = 0;
-}
-
+// ==========================================
+// Methods: Sale Completion & Print
+// ==========================================
 async function completeSale() {
   if (processing.value || !tax.cart.length || !canPay.value) return;
-
   processing.value = true;
 
   try {
-    const requiresManagerOverride = tax.cart.some((line) => Number(line.discount || 0) > (Number(line.unitPrice || 0) * Number(line.qty || 0) * 0.10));
-    const managerPin = requiresManagerOverride 
-      ? window.prompt(language.isKhmer ? 'បញ្ចូល PIN អ្នកគ្រប់គ្រង ដើម្បីអនុម័តបញ្ចុះតម្លៃលើស ១០%' : 'Enter manager PIN to approve a discount above 10%') 
-      : '';
-    if (requiresManagerOverride && !managerPin) {
-      processing.value = false;
-      return;
-    }
-    const receiptItems = tax.cart.map((line) => ({
-      ...line,
-      uomName: line.unit || line.baseUnit || 'unit',
-    }));
+    const requiresOverride = tax.cart.some(
+      (line) => Number(line.discount || 0) > (Number(line.unitPrice || 0) * Number(line.qty || 0) * 0.10)
+    );
 
-    const tenderedUSD =
-      paymentMethod.value === 'cash' ? totalTenderedUsd.value : Number(tax.cartTotal || 0);
+    let managerPin = '';
+    if (requiresOverride) {
+      managerPin = window.prompt(
+        language.isKhmer 
+          ? 'បញ្ចូល PIN អ្នកគ្រប់គ្រង ដើម្បីអនុម័តបញ្ចុះតម្លៃលើស ១០%' 
+          : 'Enter manager PIN to approve a discount above 10%'
+      );
+      if (!managerPin) {
+        processing.value = false;
+        return;
+      }
+    }
+
+    const tenderedUSD = paymentMethod.value === 'cash' 
+      ? totalTenderedUsd.value 
+      : Number(tax.cartTotal || 0);
 
     const invoice = await tax.completeSale({
       customerName: customerName.value,
@@ -915,6 +921,7 @@ async function completeSale() {
       managerPin,
     });
 
+    // Populate Print Context
     printReceipt.value = {
       company: {
         nameEn: tax.settings?.companyName || '',
@@ -925,30 +932,26 @@ async function completeSale() {
       },
       receiptNo: invoice.id,
       cashierName: invoice.staff || '',
-      items: receiptItems,
+      items: tax.cart.map((line) => ({
+        ...line,
+        uomName: line.unit || line.baseUnit || 'unit',
+      })),
       netSale: Number(invoice.netSale) || 0,
       totalVat: Number(invoice.vat) || 0,
       grandTotal: Number(invoice.total) || 0,
-      tenderedKHR: paymentMethod.value === 'cash'
-        ? Math.round(Number(receivedKhr.value) || 0)
-        : Number(invoice.receivedKHR) || 0,
-      tenderedUSD: paymentMethod.value === 'cash'
-        ? Math.round((Number(receivedUsd.value) || 0) * 100) / 100
-        : Number(invoice.receivedUSD) || 0,
-      changeUSD:
-        paymentMethod.value === 'cash'
-          ? Math.max(0, tenderedUSD - Number(invoice.total || 0))
-          : 0,
+      tenderedKHR: paymentMethod.value === 'cash' ? Math.round(Number(receivedKhr.value) || 0) : Number(invoice.receivedKHR) || 0,
+      tenderedUSD: paymentMethod.value === 'cash' ? Math.round((Number(receivedUsd.value) || 0) * 100) / 100 : Number(invoice.receivedUSD) || 0,
+      changeUSD: paymentMethod.value === 'cash' ? Math.max(0, tenderedUSD - Number(invoice.total || 0)) : 0,
       khqrImage: paymentMethod.value === 'bank' ? khqrImageUrl.value : '',
     };
 
     showNotice(
       language.isKhmer 
-        ? `វិក្កយបត្រ #${invoice.id} ត្រូវបានទូទាត់ដោយជោគជ័យ។`
+        ? `វិក្កយបត្រ #${invoice.id} ត្រូវបានទូទាត់ដោយជោគជ័យ។` 
         : `Invoice #${invoice.id} completed successfully.`
     );
 
-    // Reset Form
+    // Reset Form Fields
     search.value = '';
     selectedCustomerId.value = null;
     paymentMethod.value = 'cash';
@@ -958,8 +961,9 @@ async function completeSale() {
 
     await nextTick();
 
-    // Trigger Print after thermal container has rendered
-    window.setTimeout(() => {
+    // Print Sequence
+    window.clearTimeout(printTimer);
+    printTimer = window.setTimeout(() => {
       printThermalReceipt();
       window.setTimeout(() => {
         printReceipt.value = null;
@@ -974,19 +978,35 @@ async function completeSale() {
     processing.value = false;
   }
 }
+
+// Watchers & Lifecycle Hooks
+watch(
+  [
+    () => tax.cartTotal,
+    paymentMethod,
+    qrCurrency,
+    exchangeRate,
+    () => tax.settings?.khqrAccount,
+    () => tax.settings?.khqrMerchantName,
+  ],
+  refreshKhqr
+);
+
+onBeforeUnmount(() => {
+  window.clearTimeout(khqrCheckTimer);
+  window.clearTimeout(noticeTimer);
+  window.clearTimeout(printTimer);
+});
 </script>
 
 <style scoped>
-/* Unified Color System & Variables */
 .pos-screen {
   --pos-primary: #0d6efd;
-  --pos-primary-dark: #0b5ed7;
   --pos-surface: #ffffff;
   --pos-bg: #f8fafc;
   --pos-border: #e2e8f0;
   --pos-muted: #64748b;
-  --pos-header-dark: #0f172a;
-  
+
   min-height: 100vh;
   background-color: var(--pos-bg);
   color: #1e293b;
@@ -1027,7 +1047,7 @@ async function completeSale() {
   font-variant-numeric: tabular-nums;
 }
 
-/* POS Cards */
+/* POS Cards & Inputs */
 .pos-card {
   background: var(--pos-surface);
   border: 1px solid var(--pos-border) !important;
@@ -1035,7 +1055,6 @@ async function completeSale() {
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
 }
 
-/* Search Bar & Shortcuts */
 .shortcut-key {
   background: #f1f5f9;
   color: #475569;
@@ -1263,7 +1282,7 @@ async function completeSale() {
   font-size: 0.88rem;
 }
 
-/* Payment Method Buttons */
+/* Payment Method Selectors */
 .payment-method {
   min-height: 64px;
   border-radius: 8px;
@@ -1293,9 +1312,8 @@ async function completeSale() {
   box-shadow: 0 4px 12px rgba(13, 110, 253, 0.25);
 }
 
-/* NBC KHQR Panel */
+/* KHQR Panel */
 .khqr-panel {
-  position: relative;
   border-radius: 10px;
   background: #ffffff;
   border: 1px solid #fed7aa;
@@ -1362,7 +1380,7 @@ async function completeSale() {
   100% { transform: rotate(360deg); }
 }
 
-/* Change Due Box */
+/* Change Due / Due Badge */
 .change-box {
   padding: 0.85rem 1rem;
   display: flex;
@@ -1406,7 +1424,7 @@ async function completeSale() {
   border-radius: 8px;
 }
 
-/* Transitions */
+/* Animations */
 .fade-enter-active,
 .fade-leave-active {
   transition: opacity 0.2s ease, transform 0.2s ease;
@@ -1418,7 +1436,7 @@ async function completeSale() {
   transform: translateY(-5px);
 }
 
-/* Print Formatting for Thermal 80mm ESC/POS Printers */
+/* ESC/POS Thermal 80mm Print CSS */
 @media print {
   @page {
     margin: 0;
@@ -1483,9 +1501,8 @@ async function completeSale() {
   .page-canvas {
     padding: 1rem !important;
   }
-
   .pos-table {
-    min-width: 820px;
+    min-width: 780px;
   }
 }
 </style>

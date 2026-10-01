@@ -395,6 +395,7 @@ async function pay() {
 
     closePaymentModal();
     await load();
+    await tax.initialize();
   } catch (requestError) {
     error.value = requestError.message || (
       language.isKhmer ? 'បរាជ័យក្នុងការកត់ត្រាការទូទាត់អ្នកផ្គត់ផ្គង់។' : 'Failed to record supplier payment.'

@@ -133,7 +133,7 @@ async function notify(connection, userId, type, title, message, entityType, enti
   );
 }
 
-function calculatePurchaseTotals(items) {
+function calculatePurchaseTotals(items, taxRate = DEFAULT_VAT_RATE * 100) {
   const base = items.reduce(
     (totals, item) => {
       const subtotal = Number(item.qty) * Number(item.unitPrice);
@@ -146,30 +146,61 @@ function calculatePurchaseTotals(items) {
   );
 
   const taxableAmount = base.subtotal + base.deliveryTotal;
-  const taxAmount = roundToTwo(taxableAmount * 0.10);
-  return { ...base, taxRate: 10, taxAmount, grandTotal: taxableAmount + taxAmount };
+  const normalizedTaxRate = Number(taxRate);
+  const taxAmount = roundToTwo(taxableAmount * (normalizedTaxRate / 100));
+  return { ...base, taxRate: normalizedTaxRate, taxAmount, grandTotal: taxableAmount + taxAmount };
+}
+
+async function getConfiguredPurchaseTaxRate(connection) {
+  const [rows] = await connection.query('SELECT setting_value FROM settings WHERE setting_key = ?', ['company']);
+  const settings = rows[0]
+    ? (typeof rows[0].setting_value === 'string' ? JSON.parse(rows[0].setting_value) : rows[0].setting_value)
+    : {};
+  const configuredRate = Number(settings.vatRate ?? DEFAULT_VAT_RATE * 100);
+  return Number.isFinite(configuredRate) ? configuredRate : DEFAULT_VAT_RATE * 100;
 }
 
 function validatePurchaseOrder(payload) {
+  const orderDate = String(payload.orderDate || '');
+  const parsedOrderDate = new Date(`${orderDate}T00:00:00Z`);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(orderDate) || Number.isNaN(parsedOrderDate.getTime()) || parsedOrderDate.toISOString().slice(0, 10) !== orderDate) {
+    return 'A valid order date is required';
+  }
   if (!payload.vendorId || !payload.vendorName?.trim()) return 'Supplier is required';
   if (!Array.isArray(payload.items) || payload.items.length === 0) return 'At least one product row is required';
   for (let index = 0; index < payload.items.length; index += 1) {
     const item = payload.items[index];
+    if (!Number.isInteger(Number(item.itemId)) || Number(item.itemId) < 1) return `Select an inventory catalog item for row ${index + 1}`;
     if (!item.productName?.trim()) return `Product name is required for row ${index + 1}`;
-    if (Number(item.qty) <= 0) return `Quantity must be greater than 0 for row ${index + 1}`;
-    if (Number(item.unitPrice) < 0) return `Unit price cannot be negative for row ${index + 1}`;
-    if (Number(item.deliveryPrice) < 0) return `Delivery price cannot be negative for row ${index + 1}`;
-    if (!item.deliveryDate) return `Delivery date is required for row ${index + 1}`;
+    const quantity = Number(item.qty);
+    const unitPrice = Number(item.unitPrice);
+    const deliveryPrice = Number(item.deliveryPrice);
+    const deliveryDate = String(item.deliveryDate || '');
+    if (!Number.isFinite(quantity) || quantity <= 0 || Math.round(quantity * 1000) !== quantity * 1000) return `Quantity must be greater than 0 and use no more than 3 decimals for row ${index + 1}`;
+    if (!Number.isFinite(unitPrice) || unitPrice < 0) return `Unit price must be a non-negative number for row ${index + 1}`;
+    if (!Number.isFinite(deliveryPrice) || deliveryPrice < 0) return `Delivery price must be a non-negative number for row ${index + 1}`;
+    const parsedDeliveryDate = new Date(`${deliveryDate}T00:00:00Z`);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(deliveryDate) || Number.isNaN(parsedDeliveryDate.getTime()) || parsedDeliveryDate.toISOString().slice(0, 10) !== deliveryDate) return `A valid delivery date is required for row ${index + 1}`;
   }
   return null;
 }
 
+async function validatePurchaseOrderCatalogItems(connection, items) {
+  const itemIds = [...new Set(items.map((item) => Number(item.itemId)))];
+  const [rows] = await connection.query('SELECT id FROM items WHERE active = 1 AND id IN (?) FOR UPDATE', [itemIds]);
+  return rows.length === itemIds.length ? null : 'One or more inventory catalog items are unavailable';
+}
+
 async function insertPurchaseOrderItems(connection, orderId, items) {
   for (const item of items) {
-    const itemTotal = Number(item.qty) * Number(item.unitPrice) + Number(item.deliveryPrice);
+    const quantity = Number(item.qty);
+    const unitPrice = Number(item.unitPrice);
+    const deliveryPrice = Number(item.deliveryPrice);
+    const deliveryDate = String(item.deliveryDate);
+    const itemTotal = quantity * unitPrice + deliveryPrice;
     await connection.query(
       'INSERT INTO purchase_order_items (purchase_order_id, item_id, product_name, qty, unit_price, delivery_date, delivery_price, item_total) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-      [orderId, item.itemId || null, item.productName.trim(), Number(item.qty), Number(item.unitPrice), item.deliveryDate, Number(item.deliveryPrice), itemTotal]
+      [orderId, item.itemId || null, item.productName.trim(), quantity, unitPrice, deliveryDate, deliveryPrice, itemTotal]
     );
   }
 }
@@ -936,15 +967,22 @@ api.get('/items', async (req, res, next) => {
 });
 
 api.post('/items', auth, adminOnly, async (req, res, next) => {
+  const connection = await pool.getConnection();
   try {
     const item = req.body;
+    const qtyOnHand = Number(item.qtyOnHand || 0);
     const baseUnit = item.baseUnit || 'Unit';
     const retailPrice = Number(item.retailPrice || 0);
     const purchaseCost = Number(item.purchaseCost || 0);
+    const reorderQty = Number(item.reorderQty || 0);
+    if (!item.nameEn?.trim() || !item.barcode?.trim()) return res.status(400).json({ message: 'Item name and barcode are required' });
+    if (!Number.isFinite(qtyOnHand) || qtyOnHand < 0 || Math.round(qtyOnHand * 1000) !== qtyOnHand * 1000) return res.status(400).json({ message: 'Opening quantity must be a non-negative number with no more than 3 decimals' });
+    if (![retailPrice, purchaseCost, reorderQty].every((value) => Number.isFinite(value) && value >= 0)) return res.status(400).json({ message: 'Prices and reorder quantity must be non-negative numbers' });
 
     const defaultUnits = item.units && item.units.length ? item.units : [{ name: baseUnit, ratio: 1, retailPrice }];
 
-    const [result] = await pool.query(
+    await connection.beginTransaction();
+    const [result] = await connection.query(
       `INSERT INTO items 
       (barcode, name_kh, name_en, department, category, brand, base_unit, qty_on_hand, reorder_qty, retail_price, purchase_cost, average_cost, vendor_id, units) 
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -956,8 +994,8 @@ api.post('/items', auth, adminOnly, async (req, res, next) => {
         item.category || 'General',
         item.brand || '',
         baseUnit,
-        Number(item.qtyOnHand || 0),
-        Number(item.reorderQty || 0),
+        qtyOnHand,
+        reorderQty,
         retailPrice,
         purchaseCost,
         purchaseCost,
@@ -966,10 +1004,19 @@ api.post('/items', auth, adminOnly, async (req, res, next) => {
       ]
     );
 
+    if (qtyOnHand > 0) {
+      const reference = `OPENING-${result.insertId}`;
+      await connection.query('INSERT INTO inventory_batches (item_id, batch_no, qty_received, qty_remaining, unit_cost) VALUES (?, ?, ?, ?, ?)', [result.insertId, reference, qtyOnHand, qtyOnHand, purchaseCost]);
+      await connection.query('INSERT INTO stock_transactions (item_id, item_name, type, qty, balance_after, reference, branch) VALUES (?, ?, ?, ?, ?, ?, ?)', [result.insertId, item.nameEn.trim(), 'Adjustment', qtyOnHand, qtyOnHand, reference, item.branch || 'Head Quarter']);
+    }
+    await connection.commit();
     const [rows] = await pool.query('SELECT * FROM items WHERE id = ?', [result.insertId]);
     res.status(201).json(mapItem(rows[0]));
   } catch (error) {
+    await connection.rollback();
     next(error);
+  } finally {
+    connection.release();
   }
 });
 
@@ -987,11 +1034,23 @@ api.put('/items/:id', auth, adminOnly, async (req, res, next) => {
       return res.status(404).json({ message: 'Item not found' });
     }
     const existing = existingRows[0];
-    const qtyOnHand = Math.max(0, Number(req.body.qtyOnHand ?? existing.qty_on_hand));
-    const quantityDelta = qtyOnHand - Number(existing.qty_on_hand);
+    const qtyOnHand = Number(req.body.qtyOnHand ?? existing.qty_on_hand);
+    if (!Number.isFinite(qtyOnHand) || qtyOnHand < 0 || Math.round(qtyOnHand * 1000) !== qtyOnHand * 1000) {
+      await connection.rollback();
+      return res.status(400).json({ message: 'On-hand quantity must be a non-negative number with no more than 3 decimals' });
+    }
+    if (qtyOnHand !== Number(existing.qty_on_hand)) {
+      await connection.rollback();
+      return res.status(409).json({ message: 'Use stock adjustments to change on-hand quantity' });
+    }
     const baseUnit = req.body.baseUnit?.trim() || existing.base_unit;
-    const retailPrice = Math.max(0, Number(req.body.retailPrice ?? existing.retail_price));
-    const purchaseCost = Math.max(0, Number(req.body.purchaseCost ?? existing.purchase_cost));
+    const retailPrice = Number(req.body.retailPrice ?? existing.retail_price);
+    const purchaseCost = Number(req.body.purchaseCost ?? existing.purchase_cost);
+    const reorderQty = Number(req.body.reorderQty ?? 0);
+    if (![retailPrice, purchaseCost, reorderQty].every((value) => Number.isFinite(value) && value >= 0)) {
+      await connection.rollback();
+      return res.status(400).json({ message: 'Prices and reorder quantity must be non-negative numbers' });
+    }
     const units = Array.isArray(req.body.units) && req.body.units.length ? req.body.units : [{ name: baseUnit, ratio: 1, retailPrice }];
 
     await connection.query(
@@ -1005,7 +1064,7 @@ api.put('/items/:id', auth, adminOnly, async (req, res, next) => {
         req.body.brand || '',
         baseUnit,
         qtyOnHand,
-        Math.max(0, Number(req.body.reorderQty || 0)),
+        reorderQty,
         retailPrice,
         purchaseCost,
         req.body.vendorId || null,
@@ -1014,19 +1073,7 @@ api.put('/items/:id', auth, adminOnly, async (req, res, next) => {
       ]
     );
 
-    if (quantityDelta !== 0) {
-      await connection.query('INSERT INTO stock_transactions (item_id, item_name, type, qty, balance_after, reference, branch) VALUES (?, ?, ?, ?, ?, ?, ?)', [
-        itemId,
-        req.body.nameEn.trim(),
-        'Adjustment',
-        quantityDelta,
-        qtyOnHand,
-        'ITEM-EDIT',
-        req.body.branch || 'Head Quarter',
-      ]);
-    }
-
-    await logActivity(connection, req.user.id, 'item_updated', 'item', itemId, { quantityDelta, name: req.body.nameEn.trim() });
+    await logActivity(connection, req.user.id, 'item_updated', 'item', itemId, { name: req.body.nameEn.trim() });
     await connection.commit();
 
     const [rows] = await pool.query('SELECT * FROM items WHERE id = ?', [itemId]);
@@ -1101,20 +1148,34 @@ api.post('/stock/adjustments', auth, adminOnly, async (req, res, next) => {
 // ==========================================
 // VENDORS & CUSTOMERS
 // ==========================================
+const vendorSelectSql = `
+  SELECT v.*,
+    COALESCE((
+      SELECT SUM(GREATEST(po.grand_total - COALESCE((
+        SELECT SUM(ap.amount) FROM ap_payments ap WHERE ap.purchase_order_id = po.id
+      ), 0), 0))
+      FROM purchase_orders po
+      WHERE po.vendor_id = v.id AND po.status <> 'Cancelled'
+    ), 0) AS balance
+  FROM vendors v
+`;
+
+function mapVendor(row) {
+  return {
+    id: Number(row.id),
+    name: row.name,
+    phone: row.phone || '',
+    creditLimit: Number(row.credit_limit || 0),
+    balance: Number(row.balance || 0),
+    note: row.note || '',
+    vatTin: row.vat_tin || '',
+  };
+}
+
 api.get('/vendors', async (req, res, next) => {
   try {
-    const [rows] = await pool.query('SELECT * FROM vendors WHERE active = 1 ORDER BY name');
-    res.json(
-      rows.map((row) => ({
-        id: row.id,
-        name: row.name,
-        phone: row.phone,
-        creditLimit: Number(row.credit_limit || 0),
-        balance: 0,
-        note: row.note,
-        vatTin: row.vat_tin || '',
-      }))
-    );
+    const [rows] = await pool.query(`${vendorSelectSql} WHERE v.active = 1 ORDER BY v.name`);
+    res.json(rows.map(mapVendor));
   } catch (error) {
     next(error);
   }
@@ -1123,15 +1184,17 @@ api.get('/vendors', async (req, res, next) => {
 api.post('/vendors', auth, adminOnly, async (req, res, next) => {
   try {
     if (!req.body.name?.trim()) return res.status(400).json({ message: 'Vendor name is required' });
-    const [result] = await pool.query('INSERT INTO vendors (name, phone, credit_limit, note) VALUES (?, ?, ?, ?)', [
+    const creditLimit = Number(req.body.creditLimit ?? 0);
+    if (!Number.isFinite(creditLimit) || creditLimit < 0) return res.status(400).json({ message: 'Credit limit must be a non-negative amount' });
+    const [result] = await pool.query('INSERT INTO vendors (name, phone, vat_tin, credit_limit, note) VALUES (?, ?, ?, ?, ?)', [
       req.body.name.trim(),
       req.body.phone || '',
-      Number(req.body.creditLimit || 0),
+      req.body.vatTin?.trim() || null,
+      creditLimit,
       req.body.note || '',
     ]);
-    const [rows] = await pool.query('SELECT * FROM vendors WHERE id = ?', [result.insertId]);
-    const vendor = rows[0];
-    res.status(201).json({ id: vendor.id, name: vendor.name, phone: vendor.phone, creditLimit: Number(vendor.credit_limit), balance: 0, note: vendor.note, vatTin: vendor.vat_tin || '' });
+    const [rows] = await pool.query(`${vendorSelectSql} WHERE v.id = ?`, [result.insertId]);
+    res.status(201).json(mapVendor(rows[0]));
   } catch (error) {
     next(error);
   }
@@ -1142,19 +1205,20 @@ api.put('/vendors/:id', auth, adminOnly, async (req, res, next) => {
     const vendorId = Number(req.params.id);
     if (!Number.isInteger(vendorId) || vendorId < 1) return res.status(400).json({ message: 'Invalid vendor id' });
     if (!req.body.name?.trim()) return res.status(400).json({ message: 'Vendor name is required' });
+    const creditLimit = Number(req.body.creditLimit ?? 0);
+    if (!Number.isFinite(creditLimit) || creditLimit < 0) return res.status(400).json({ message: 'Credit limit must be a non-negative amount' });
 
     const [result] = await pool.query('UPDATE vendors SET name = ?, phone = ?, vat_tin = ?, credit_limit = ?, note = ? WHERE id = ? AND active = 1', [
       req.body.name.trim(),
       req.body.phone || '',
-      req.body.vatTin || '',
-      Number(req.body.creditLimit || 0),
+      req.body.vatTin?.trim() || null,
+      creditLimit,
       req.body.note || '',
       vendorId,
     ]);
     if (!result.affectedRows) return res.status(404).json({ message: 'Vendor not found' });
-    const [rows] = await pool.query('SELECT * FROM vendors WHERE id = ?', [vendorId]);
-    const vendor = rows[0];
-    res.json({ id: vendor.id, name: vendor.name, phone: vendor.phone, vatTin: vendor.vat_tin || '', creditLimit: Number(vendor.credit_limit || 0), balance: 0, note: vendor.note || '' });
+    const [rows] = await pool.query(`${vendorSelectSql} WHERE v.id = ?`, [vendorId]);
+    res.json(mapVendor(rows[0]));
   } catch (error) {
     next(error);
   }
@@ -1423,7 +1487,7 @@ api.get('/transactions', auth, async (req, res, next) => {
 api.get('/purchase-orders', auth, async (req, res, next) => {
   try {
     const [rows] = await pool.query(
-      `SELECT po.*, COUNT(poi.id) item_count FROM purchase_orders po LEFT JOIN purchase_order_items poi ON poi.purchase_order_id = po.id GROUP BY po.id ORDER BY po.created_at DESC`
+      `SELECT po.*, DATE_FORMAT(po.order_date, '%Y-%m-%d') AS order_date_display, COUNT(poi.id) item_count, COALESCE(ap.paid_amount, 0) AS paid_amount FROM purchase_orders po LEFT JOIN purchase_order_items poi ON poi.purchase_order_id = po.id LEFT JOIN (SELECT purchase_order_id, SUM(amount) AS paid_amount FROM ap_payments GROUP BY purchase_order_id) ap ON ap.purchase_order_id = po.id GROUP BY po.id, ap.paid_amount ORDER BY po.created_at DESC`
     );
     res.json(
       rows.map((row) => ({
@@ -1431,6 +1495,7 @@ api.get('/purchase-orders', auth, async (req, res, next) => {
         orderId: row.id,
         vendorId: row.vendor_id,
         vendor: row.vendor_name,
+        orderDate: row.order_date_display,
         expected: row.expected_date,
         subtotal: Number(row.subtotal || 0),
         deliveryTotal: Number(row.delivery_total || 0),
@@ -1440,6 +1505,7 @@ api.get('/purchase-orders', auth, async (req, res, next) => {
         status: row.status,
         note: row.note,
         itemCount: Number(row.item_count),
+        paidAmount: Number(row.paid_amount || 0),
         createdBy: row.created_by,
       }))
     );
@@ -1454,17 +1520,28 @@ api.post('/purchase-orders', auth, adminOnly, async (req, res, next) => {
     const validation = validatePurchaseOrder(req.body);
     if (validation) return res.status(400).json({ message: validation });
     await connection.beginTransaction();
-    const [countRows] = await connection.query('SELECT COUNT(*) AS count FROM purchase_orders');
-    const orderNo = `PO-${String(1001 + Number(countRows[0].count)).padStart(4, '0')}`;
-    const totals = calculatePurchaseTotals(req.body.items);
+    const catalogError = await validatePurchaseOrderCatalogItems(connection, req.body.items);
+    if (catalogError) {
+      await connection.rollback();
+      return res.status(400).json({ message: catalogError });
+    }
+    const [vendors] = await connection.query('SELECT id, name FROM vendors WHERE id = ? AND active = 1 FOR UPDATE', [req.body.vendorId]);
+    if (!vendors[0]) {
+      await connection.rollback();
+      return res.status(400).json({ message: 'The selected supplier is unavailable' });
+    }
+    const totals = calculatePurchaseTotals(req.body.items, await getConfiguredPurchaseTaxRate(connection));
+    const temporaryOrderNo = `TMP-${crypto.randomBytes(8).toString('hex')}`;
     const [result] = await connection.query(
-      'INSERT INTO purchase_orders (order_no, vendor_id, vendor_name, expected_date, subtotal, delivery_total, tax_rate, tax_amount, grand_total, total, note, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-      [orderNo, req.body.vendorId, req.body.vendorName.trim(), req.body.expectedDate || null, totals.subtotal, totals.deliveryTotal, totals.taxRate, totals.taxAmount, totals.grandTotal, totals.grandTotal, req.body.note || '', req.user.id]
+      'INSERT INTO purchase_orders (order_no, vendor_id, vendor_name, order_date, expected_date, subtotal, delivery_total, tax_rate, tax_amount, grand_total, total, note, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      [temporaryOrderNo, vendors[0].id, vendors[0].name, req.body.orderDate, req.body.expectedDate || null, totals.subtotal, totals.deliveryTotal, totals.taxRate, totals.taxAmount, totals.grandTotal, totals.grandTotal, req.body.note || '', req.user.id]
     );
+    const orderNo = `PO-${String(1000 + Number(result.insertId)).padStart(4, '0')}`;
+    await connection.query('UPDATE purchase_orders SET order_no = ? WHERE id = ?', [orderNo, result.insertId]);
     await insertPurchaseOrderItems(connection, result.insertId, req.body.items);
     await logActivity(connection, req.user.id, 'purchase_order_created', 'purchase_order', result.insertId, { orderNo, total: totals.grandTotal });
     await connection.commit();
-    res.status(201).json({ id: orderNo, orderId: result.insertId, vendor: req.body.vendorName.trim(), ...totals, status: 'Pending', note: req.body.note || '', items: req.body.items });
+    res.status(201).json({ id: orderNo, orderId: result.insertId, vendor: vendors[0].name, orderDate: req.body.orderDate, ...totals, status: 'Pending', note: req.body.note || '', items: req.body.items });
   } catch (error) {
     await connection.rollback();
     next(error);
@@ -1477,7 +1554,7 @@ api.get('/purchase-orders/:id', auth, async (req, res, next) => {
   try {
     const numericId = /^\d+$/.test(req.params.id) ? Number(req.params.id) : null;
     const [orders] = await pool.query(
-      numericId === null ? 'SELECT * FROM purchase_orders WHERE order_no = ?' : 'SELECT * FROM purchase_orders WHERE order_no = ? OR id = ?',
+      numericId === null ? "SELECT *, DATE_FORMAT(order_date, '%Y-%m-%d') AS order_date_display FROM purchase_orders WHERE order_no = ?" : "SELECT *, DATE_FORMAT(order_date, '%Y-%m-%d') AS order_date_display FROM purchase_orders WHERE order_no = ? OR id = ?",
       numericId === null ? [req.params.id] : [req.params.id, numericId]
     );
     if (!orders[0]) return res.status(404).json({ message: 'Purchase order not found' });
@@ -1485,6 +1562,7 @@ api.get('/purchase-orders/:id', auth, async (req, res, next) => {
     res.json({
       ...orders[0],
       orderNo: orders[0].order_no,
+      orderDate: orders[0].order_date_display,
       subtotal: Number(orders[0].subtotal || 0),
       deliveryTotal: Number(orders[0].delivery_total || 0),
       taxRate: Number(orders[0].tax_rate || 10),
@@ -1512,22 +1590,44 @@ api.put('/purchase-orders/:id', auth, adminOnly, async (req, res, next) => {
     const validation = validatePurchaseOrder(req.body);
     if (validation) return res.status(400).json({ message: validation });
     await connection.beginTransaction();
+    const catalogError = await validatePurchaseOrderCatalogItems(connection, req.body.items);
+    if (catalogError) {
+      await connection.rollback();
+      return res.status(400).json({ message: catalogError });
+    }
     const numericId = /^\d+$/.test(req.params.id) ? Number(req.params.id) : null;
     const [orders] = await connection.query(
       numericId === null ? 'SELECT * FROM purchase_orders WHERE order_no = ? FOR UPDATE' : 'SELECT * FROM purchase_orders WHERE order_no = ? OR id = ? FOR UPDATE',
       numericId === null ? [req.params.id] : [req.params.id, numericId]
     );
-    if (!orders[0]) return res.status(404).json({ message: 'Purchase order not found' });
-    const totals = calculatePurchaseTotals(req.body.items);
+    if (!orders[0]) {
+      await connection.rollback();
+      return res.status(404).json({ message: 'Purchase order not found' });
+    }
+    if (orders[0].status !== 'Pending') {
+      await connection.rollback();
+      return res.status(409).json({ message: 'Only pending purchase orders can be edited' });
+    }
+    const [payments] = await connection.query('SELECT COUNT(*) AS count FROM ap_payments WHERE purchase_order_id = ?', [orders[0].id]);
+    if (Number(payments[0].count) > 0) {
+      await connection.rollback();
+      return res.status(409).json({ message: 'Purchase orders with recorded payments cannot be edited' });
+    }
+    const [vendors] = await connection.query('SELECT id, name FROM vendors WHERE id = ? AND active = 1 FOR UPDATE', [req.body.vendorId]);
+    if (!vendors[0]) {
+      await connection.rollback();
+      return res.status(400).json({ message: 'The selected supplier is unavailable' });
+    }
+    const totals = calculatePurchaseTotals(req.body.items, await getConfiguredPurchaseTaxRate(connection));
     await connection.query(
-      'UPDATE purchase_orders SET vendor_id = ?, vendor_name = ?, expected_date = ?, subtotal = ?, delivery_total = ?, tax_rate = ?, tax_amount = ?, grand_total = ?, total = ?, note = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
-      [req.body.vendorId, req.body.vendorName.trim(), req.body.expectedDate || null, totals.subtotal, totals.deliveryTotal, totals.taxRate, totals.taxAmount, totals.grandTotal, totals.grandTotal, req.body.note || '', orders[0].id]
+      'UPDATE purchase_orders SET vendor_id = ?, vendor_name = ?, order_date = ?, expected_date = ?, subtotal = ?, delivery_total = ?, tax_rate = ?, tax_amount = ?, grand_total = ?, total = ?, note = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+      [vendors[0].id, vendors[0].name, req.body.orderDate, req.body.expectedDate || null, totals.subtotal, totals.deliveryTotal, totals.taxRate, totals.taxAmount, totals.grandTotal, totals.grandTotal, req.body.note || '', orders[0].id]
     );
     await connection.query('DELETE FROM purchase_order_items WHERE purchase_order_id = ?', [orders[0].id]);
     await insertPurchaseOrderItems(connection, orders[0].id, req.body.items);
     await logActivity(connection, req.user.id, 'purchase_order_updated', 'purchase_order', orders[0].id, { orderNo: orders[0].order_no });
     await connection.commit();
-    res.json({ id: orders[0].order_no, orderId: orders[0].id, ...totals, items: req.body.items });
+    res.json({ id: orders[0].order_no, orderId: orders[0].id, orderDate: req.body.orderDate, ...totals, items: req.body.items });
   } catch (error) {
     await connection.rollback();
     next(error);
@@ -1537,16 +1637,36 @@ api.put('/purchase-orders/:id', auth, adminOnly, async (req, res, next) => {
 });
 
 api.delete('/purchase-orders/:id', auth, adminOnly, async (req, res, next) => {
+  const connection = await pool.getConnection();
   try {
+    await connection.beginTransaction();
     const numericId = /^\d+$/.test(req.params.id) ? Number(req.params.id) : null;
-    const [result] = await pool.query(
-      numericId === null ? 'DELETE FROM purchase_orders WHERE order_no = ?' : 'DELETE FROM purchase_orders WHERE order_no = ? OR id = ?',
+    const [orders] = await connection.query(
+      numericId === null ? 'SELECT * FROM purchase_orders WHERE order_no = ? FOR UPDATE' : 'SELECT * FROM purchase_orders WHERE order_no = ? OR id = ? FOR UPDATE',
       numericId === null ? [req.params.id] : [req.params.id, numericId]
     );
-    if (!result.affectedRows) return res.status(404).json({ message: 'Purchase order not found' });
+    if (!orders[0]) {
+      await connection.rollback();
+      return res.status(404).json({ message: 'Purchase order not found' });
+    }
+    if (orders[0].status !== 'Pending') {
+      await connection.rollback();
+      return res.status(409).json({ message: 'Only pending purchase orders can be deleted' });
+    }
+    const [payments] = await connection.query('SELECT COUNT(*) AS count FROM ap_payments WHERE purchase_order_id = ?', [orders[0].id]);
+    if (Number(payments[0].count) > 0) {
+      await connection.rollback();
+      return res.status(409).json({ message: 'Purchase orders with recorded payments cannot be deleted' });
+    }
+    await connection.query('DELETE FROM purchase_orders WHERE id = ?', [orders[0].id]);
+    await logActivity(connection, req.user.id, 'purchase_order_deleted', 'purchase_order', orders[0].id, { orderNo: orders[0].order_no });
+    await connection.commit();
     res.json({ ok: true });
   } catch (error) {
+    await connection.rollback();
     next(error);
+  } finally {
+    connection.release();
   }
 });
 
@@ -1564,21 +1684,35 @@ api.post('/purchase-orders/:id/receive', auth, adminOnly, async (req, res, next)
       await connection.rollback();
       return res.status(409).json({ message: 'Purchase order is already received' });
     }
+    if (orders[0].status !== 'Pending') {
+      await connection.rollback();
+      return res.status(409).json({ message: 'Only pending purchase orders can be received' });
+    }
     const [lines] = await connection.query('SELECT * FROM purchase_order_items WHERE purchase_order_id = ?', [orders[0].id]);
+    if (!lines.length) {
+      await connection.rollback();
+      return res.status(409).json({ message: 'This purchase order has no products to receive' });
+    }
+    if (lines.some((line) => !line.item_id)) {
+      await connection.rollback();
+      return res.status(409).json({ message: 'Link every product to an inventory catalog item before receiving this order' });
+    }
     for (const line of lines) {
-      if (!line.item_id) continue;
-      const [items] = await connection.query('SELECT * FROM items WHERE id = ? FOR UPDATE', [line.item_id]);
-      if (!items[0]) continue;
+      const [items] = await connection.query('SELECT * FROM items WHERE id = ? AND active = 1 FOR UPDATE', [line.item_id]);
+      if (!items[0]) {
+        await connection.rollback();
+        return res.status(409).json({ message: `Inventory item for "${line.product_name}" is unavailable` });
+      }
       const item = items[0];
       const oldQty = Number(item.qty_on_hand);
       const receivedQty = Number(line.qty);
-      const unitCost = Number(line.unit_price);
+      const unitCost = Number(line.unit_price) + Number(line.delivery_price) / receivedQty;
       const newQty = oldQty + receivedQty;
       const averageCost = newQty > 0 ? (oldQty * Number(item.average_cost) + receivedQty * unitCost) / newQty : unitCost;
       await connection.query('UPDATE items SET qty_on_hand = ?, purchase_cost = ?, average_cost = ? WHERE id = ?', [newQty, unitCost, averageCost, item.id]);
       await connection.query(
         'INSERT INTO inventory_batches (item_id, batch_no, expiry_date, qty_received, qty_remaining, unit_cost) VALUES (?, ?, ?, ?, ?, ?)',
-        [item.id, req.body.batchNo || orders[0].order_no, line.delivery_date || null, receivedQty, receivedQty, unitCost]
+        [item.id, req.body.batchNo || orders[0].order_no, null, receivedQty, receivedQty, unitCost]
       );
       await connection.query('INSERT INTO stock_transactions (item_id, item_name, type, qty, balance_after, reference, branch) VALUES (?, ?, ?, ?, ?, ?, ?)', [
         item.id,
@@ -2316,4 +2450,5 @@ api.put('/settings', auth, adminOnly, async (req, res, next) => {
   }
 });
 
+api.validatePurchaseOrder = validatePurchaseOrder;
 module.exports = api;

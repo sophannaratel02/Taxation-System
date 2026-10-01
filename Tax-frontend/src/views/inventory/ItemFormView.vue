@@ -123,9 +123,13 @@
             v-model.number="form.qtyOnHand"
             type="number"
             min="0"
-            step="1"
+            step="0.001"
             class="form-control"
+            :disabled="isEditing"
           />
+          <div v-if="isEditing" class="form-text">
+            {{ text.stockAdjustmentHelp }}
+          </div>
         </div>
       </div>
 
@@ -172,9 +176,9 @@ const isSaving = ref(false);
 const errorMessage = ref('');
 
 const text = computed(() => language.isKhmer ? {
-  inventoryMaster: 'មូលដ្ឋានទិន្នន័យស្តុក', createTitle: 'បង្កើតទំនិញថ្មី', editTitle: 'កែប្រែទំនិញ', description: 'បង្កើតទំនិញជាមួយឯកតា តម្លៃ និងកម្រិតបញ្ជាទិញ។', englishName: 'ឈ្មោះជាភាសាអង់គ្លេស', englishNamePlaceholder: 'ឧ. Coca-Cola 330ml', khmerName: 'ឈ្មោះជាភាសាខ្មែរ', khmerNamePlaceholder: 'ឧ. កូកាកូឡា ៣៣០មីលីលីត្រ', barcode: 'បាកូដ', barcodePlaceholder: 'ស្កេន ឬបញ្ចូលបាកូដ', category: 'ប្រភេទ', categoryPlaceholder: 'ឧ. ភេសជ្ជៈ', department: 'ផ្នែក', departmentPlaceholder: 'ឧ. ទូទៅ', baseUnit: 'ឯកតាមូលដ្ឋាន', baseUnitPlaceholder: 'ឧ. កំប៉ុង ប្រអប់ ឯកតា', retailPrice: 'តម្លៃលក់រាយ', purchaseCost: 'ថ្លៃដើមទិញ', reorderQty: 'បរិមាណបញ្ជាទិញឡើងវិញ', openingQty: 'បរិមាណដើម', cancel: 'បោះបង់', update: 'ធ្វើបច្ចុប្បន្នភាពទំនិញ', save: 'រក្សាទុកទំនិញ', saved: 'បានរក្សាទុកទំនិញដោយជោគជ័យ។ កំពុងត្រឡប់ទៅបញ្ជីទំនិញ...', error: 'មិនអាចរក្សាទុកទំនិញបានទេ។'
+  inventoryMaster: 'មូលដ្ឋានទិន្នន័យស្តុក', createTitle: 'បង្កើតទំនិញថ្មី', editTitle: 'កែប្រែទំនិញ', description: 'បង្កើតទំនិញជាមួយឯកតា តម្លៃ និងកម្រិតបញ្ជាទិញ។', englishName: 'ឈ្មោះជាភាសាអង់គ្លេស', englishNamePlaceholder: 'ឧ. Coca-Cola 330ml', khmerName: 'ឈ្មោះជាភាសាខ្មែរ', khmerNamePlaceholder: 'ឧ. កូកាកូឡា ៣៣០មីលីលីត្រ', barcode: 'បាកូដ', barcodePlaceholder: 'ស្កេន ឬបញ្ចូលបាកូដ', category: 'ប្រភេទ', categoryPlaceholder: 'ឧ. ភេសជ្ជៈ', department: 'ផ្នែក', departmentPlaceholder: 'ឧ. ទូទៅ', baseUnit: 'ឯកតាមូលដ្ឋាន', baseUnitPlaceholder: 'ឧ. កំប៉ុង ប្រអប់ ឯកតា', retailPrice: 'តម្លៃលក់រាយ', purchaseCost: 'ថ្លៃដើមទិញ', reorderQty: 'បរិមាណបញ្ជាទិញឡើងវិញ', openingQty: 'បរិមាណដើម', stockAdjustmentHelp: 'កែប្រែស្តុកតាមទំព័រកែតម្រូវស្តុក ដើម្បីរក្សាបញ្ជីប្រតិបត្តិការ។', cancel: 'បោះបង់', update: 'ធ្វើបច្ចុប្បន្នភាពទំនិញ', save: 'រក្សាទុកទំនិញ', saved: 'បានរក្សាទុកទំនិញដោយជោគជ័យ។ កំពុងត្រឡប់ទៅបញ្ជីទំនិញ...', error: 'មិនអាចរក្សាទុកទំនិញបានទេ។'
 } : {
-  inventoryMaster: 'Inventory master', createTitle: 'Create new item', editTitle: 'Edit item', description: 'Create an item with its base unit, pricing, and reorder level.', englishName: 'English name', englishNamePlaceholder: 'e.g., Coca-Cola 330ml', khmerName: 'Khmer name', khmerNamePlaceholder: 'e.g., កូកាកូឡា ៣៣០មីលីលីត្រ', barcode: 'Barcode', barcodePlaceholder: 'Scan or enter barcode', category: 'Category', categoryPlaceholder: 'e.g., Beverage', department: 'Department', departmentPlaceholder: 'e.g., General', baseUnit: 'Base unit', baseUnitPlaceholder: 'e.g., Can, Box, Unit', retailPrice: 'Retail price', purchaseCost: 'Purchase cost', reorderQty: 'Reorder quantity', openingQty: 'Opening quantity', cancel: 'Cancel', update: 'Update item', save: 'Save item', saved: 'Item saved successfully. Redirecting to item list...', error: 'Failed to save item.'
+  inventoryMaster: 'Inventory master', createTitle: 'Create new item', editTitle: 'Edit item', description: 'Create an item with its base unit, pricing, and reorder level.', englishName: 'English name', englishNamePlaceholder: 'e.g., Coca-Cola 330ml', khmerName: 'Khmer name', khmerNamePlaceholder: 'e.g., កូកាកូឡា ៣៣០មីលីលីត្រ', barcode: 'Barcode', barcodePlaceholder: 'Scan or enter barcode', category: 'Category', categoryPlaceholder: 'e.g., Beverage', department: 'Department', departmentPlaceholder: 'e.g., General', baseUnit: 'Base unit', baseUnitPlaceholder: 'e.g., Can, Box, Unit', retailPrice: 'Retail price', purchaseCost: 'Purchase cost', reorderQty: 'Reorder quantity', openingQty: 'Opening quantity', stockAdjustmentHelp: 'Change stock from Stock Adjustments so each movement is recorded.', cancel: 'Cancel', update: 'Update item', save: 'Save item', saved: 'Item saved successfully. Redirecting to item list...', error: 'Failed to save item.'
 });
 
 const form = reactive({

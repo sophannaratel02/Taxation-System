@@ -1,5 +1,7 @@
 const mysql = require('mysql2/promise');
 const bcrypt = require('bcryptjs');
+const fs = require('fs/promises');
+const path = require('path');
 
 const dbConfig = {
   host: process.env.MYSQL_HOST || '127.0.0.1',
@@ -42,6 +44,15 @@ async function addColumnIfMissing(tableName, columnName, definition) {
   if (Number(columns[0].count) === 0) {
     await pool.query(`ALTER TABLE \`${tableName}\` ADD COLUMN \`${columnName}\` ${definition}`);
   }
+}
+
+async function columnExists(tableName, columnName) {
+  const [columns] = await pool.query(
+    `SELECT COUNT(*) AS count FROM information_schema.COLUMNS
+     WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ? AND COLUMN_NAME = ?`,
+    [dbConfig.database, tableName, columnName]
+  );
+  return Number(columns[0].count) > 0;
 }
 
 async function addUniqueIndexIfMissing(tableName, indexName, columnName) {
@@ -186,6 +197,7 @@ const schemaStatements = [
     item_name VARCHAR(180) NOT NULL,
     type ENUM('Sale','Purchase','Adjustment','Transfer','Reversed') NOT NULL,
     qty DECIMAL(14,3) NOT NULL,
+    balance_after DECIMAL(14,3) NOT NULL DEFAULT 0.000,
     reference VARCHAR(80) NOT NULL,
     branch VARCHAR(120) NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -199,6 +211,7 @@ const schemaStatements = [
     order_no VARCHAR(40) UNIQUE NOT NULL,
     vendor_id INT NULL,
     vendor_name VARCHAR(160) NOT NULL,
+    order_date DATE NULL,
     expected_date DATE NULL,
     subtotal DECIMAL(14,2) NOT NULL DEFAULT 0.00,
     delivery_total DECIMAL(14,2) NOT NULL DEFAULT 0.00,
@@ -372,6 +385,70 @@ async function initializeDatabase() {
     await pool.query(statement);
   }
 
+  const monthlyTaxMigration = await fs.readFile(path.resolve(__dirname, '../migrations/004_monthly_tax.sql'), 'utf8');
+  await pool.query(monthlyTaxMigration);
+  const salesCategoryColumns = [
+    ['non_taxable_sale_usd', 'DECIMAL(16,2) NOT NULL DEFAULT 0.00'],
+    ['non_taxable_sale_khr', 'DECIMAL(16,2) NOT NULL DEFAULT 0.00'],
+    ['export_sale_usd', 'DECIMAL(16,2) NOT NULL DEFAULT 0.00'],
+    ['export_sale_khr', 'DECIMAL(16,2) NOT NULL DEFAULT 0.00'],
+    ['taxable_person_value_usd', 'DECIMAL(16,2) NOT NULL DEFAULT 0.00'],
+    ['taxable_person_value_khr', 'DECIMAL(16,2) NOT NULL DEFAULT 0.00'],
+    ['taxable_person_vat_usd', 'DECIMAL(16,2) NOT NULL DEFAULT 0.00'],
+    ['taxable_person_vat_khr', 'DECIMAL(16,2) NOT NULL DEFAULT 0.00'],
+    ['local_sale_value_usd', 'DECIMAL(16,2) NOT NULL DEFAULT 0.00'],
+    ['local_sale_value_khr', 'DECIMAL(16,2) NOT NULL DEFAULT 0.00'],
+    ['local_sale_vat_usd', 'DECIMAL(16,2) NOT NULL DEFAULT 0.00'],
+    ['local_sale_vat_khr', 'DECIMAL(16,2) NOT NULL DEFAULT 0.00'],
+    ['sale_categories_migrated', 'TINYINT(1) NOT NULL DEFAULT 0'],
+  ];
+  for (const [columnName, definition] of salesCategoryColumns) {
+    await addColumnIfMissing('sale_records', columnName, definition);
+  }
+  const salesCategoryMigration = await fs.readFile(path.resolve(__dirname, '../migrations/007_sales_journal_categories.sql'), 'utf8');
+  await pool.query(salesCategoryMigration);
+  const annualTaxMigration = await fs.readFile(path.resolve(__dirname, '../migrations/005_annual_toi.sql'), 'utf8');
+  await pool.query(annualTaxMigration);
+  await addColumnIfMissing('annual_toi_returns', 'details_json', 'JSON NULL');
+  const gdtWhtMigration = await fs.readFile(path.resolve(__dirname, '../migrations/006_gdt_wht_items.sql'), 'utf8');
+  await pool.query(gdtWhtMigration);
+  await addColumnIfMissing('sale_records', 'quantity', 'DECIMAL(14,3) NOT NULL DEFAULT 1.000');
+
+  await addColumnIfMissing('tax_periods', 'previous_vat_credit_khr', 'DECIMAL(16,2) NOT NULL DEFAULT 0.00');
+  await addColumnIfMissing('tax_periods', 'previous_top_credit_khr', 'DECIMAL(16,2) NOT NULL DEFAULT 0.00');
+  await addColumnIfMissing('tax_periods', 'specific_tax_khr', 'DECIMAL(16,2) NOT NULL DEFAULT 0.00');
+  await addColumnIfMissing('tax_periods', 'other_taxes_khr', 'DECIMAL(16,2) NOT NULL DEFAULT 0.00');
+  const vatBoxes = [
+    ['box_05_previous_credit_khr', 'DECIMAL(16,2) NOT NULL DEFAULT 0.00'],
+    ['box_06_non_taxable_purchases_khr', 'DECIMAL(16,2) NOT NULL DEFAULT 0.00'],
+    ['box_07_local_purchases_khr', 'DECIMAL(16,2) NOT NULL DEFAULT 0.00'],
+    ['box_08_local_input_vat_khr', 'DECIMAL(16,2) NOT NULL DEFAULT 0.00'],
+    ['box_09_import_purchases_khr', 'DECIMAL(16,2) NOT NULL DEFAULT 0.00'],
+    ['box_10_import_input_vat_khr', 'DECIMAL(16,2) NOT NULL DEFAULT 0.00'],
+    ['box_11_total_input_vat_khr', 'DECIMAL(16,2) NOT NULL DEFAULT 0.00'],
+    ['box_12_non_taxable_sales_khr', 'DECIMAL(16,2) NOT NULL DEFAULT 0.00'],
+    ['box_13_export_sales_khr', 'DECIMAL(16,2) NOT NULL DEFAULT 0.00'],
+    ['box_14_standard_sales_khr', 'DECIMAL(16,2) NOT NULL DEFAULT 0.00'],
+    ['box_15_output_vat_khr', 'DECIMAL(16,2) NOT NULL DEFAULT 0.00'],
+    ['box_16_total_output_vat_khr', 'DECIMAL(16,2) NOT NULL DEFAULT 0.00'],
+    ['box_16_tax_payable_khr', 'DECIMAL(16,2) NOT NULL DEFAULT 0.00'],
+    ['box_17_tax_due_khr', 'DECIMAL(16,2) NOT NULL DEFAULT 0.00'],
+    ['box_18_credit_carried_forward_khr', 'DECIMAL(16,2) NOT NULL DEFAULT 0.00'],
+  ];
+  for (const [columnName, definition] of vatBoxes) {
+    await addColumnIfMissing('vat_returns', columnName, definition);
+  }
+
+  if (await columnExists('tax_periods', 'vat_credit_previous_khr')) {
+    await pool.query('UPDATE tax_periods SET previous_vat_credit_khr = vat_credit_previous_khr WHERE previous_vat_credit_khr = 0 AND vat_credit_previous_khr <> 0');
+  }
+  if (await columnExists('tax_periods', 'top_credit_previous_khr')) {
+    await pool.query('UPDATE tax_periods SET previous_top_credit_khr = top_credit_previous_khr WHERE previous_top_credit_khr = 0 AND top_credit_previous_khr <> 0');
+  }
+  if (await columnExists('tax_periods', 'specific_tax_base_khr') && await columnExists('tax_periods', 'specific_tax_rate')) {
+    await pool.query('UPDATE tax_periods SET specific_tax_khr = ROUND(specific_tax_base_khr * specific_tax_rate, 2) WHERE specific_tax_khr = 0 AND specific_tax_base_khr <> 0');
+  }
+
   // Keep databases created by older project versions compatible with the current API.
   await addColumnIfMissing('khqr_payment_intents', 'payway_tran_id', 'VARCHAR(20) NULL');
   await addUniqueIndexIfMissing('khqr_payment_intents', 'uq_khqr_payway_tran_id', 'payway_tran_id');
@@ -400,6 +477,8 @@ async function initializeDatabase() {
   await addColumnIfMissing('invoice_lines', 'line_total', 'DECIMAL(14,2) NOT NULL DEFAULT 0.00');
   await addColumnIfMissing('stock_transactions', 'balance_after', 'DECIMAL(14,3) NOT NULL DEFAULT 0.000');
   await addColumnIfMissing('purchase_orders', 'subtotal', 'DECIMAL(14,2) NOT NULL DEFAULT 0.00');
+  await addColumnIfMissing('purchase_orders', 'order_date', 'DATE NULL');
+  await pool.query('UPDATE purchase_orders SET order_date = DATE(created_at) WHERE order_date IS NULL');
   await addColumnIfMissing('purchase_orders', 'delivery_total', 'DECIMAL(14,2) NOT NULL DEFAULT 0.00');
   await addColumnIfMissing('purchase_orders', 'tax_rate', 'DECIMAL(5,2) NOT NULL DEFAULT 10.00');
   await addColumnIfMissing('purchase_orders', 'tax_amount', 'DECIMAL(14,2) NOT NULL DEFAULT 0.00');

@@ -4,6 +4,8 @@
     :description="language.t('manageSupplier')"
     :action-label="language.t('addVendor')"
     :edit-label="language.isKhmer ? 'កែប្រែអ្នកផ្គត់ផ្គង់' : 'Edit vendor'"
+    :delete-confirm-message="language.isKhmer ? 'តើអ្នកចង់លុបអ្នកផ្គត់ផ្គង់នេះមែនទេ?' : 'Archive this vendor? Existing purchase history will be retained.'"
+    :delete-success-message="language.isKhmer ? 'បានរក្សាទុកអ្នកផ្គត់ផ្គង់ជាបណ្ណសារហើយ។' : 'Vendor archived successfully.'"
     :table-title="language.t('vendorDirectory')"
     :headings="[language.t('vendor'), language.t('contact'), language.t('creditLimit'), language.t('balance'), language.t('note')]"
     :rows="rows"
