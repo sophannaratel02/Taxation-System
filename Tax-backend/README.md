@@ -23,7 +23,7 @@ GMAIL_APP_PASSWORD=your-16-character-app-password
 
 The backend creates the database, tables, default master data, and an administrator account on first startup.
 
-User document submissions are stored under `Tax-backend/uploads/documents` and tracked in `project_files` with a pending approval status. Uploads support PDF, JPG/PNG, TXT, DOC/DOCX, and XLS/XLSX up to 10 MB. The startup database initializer applies the required metadata and payment-intent table; existing MySQL installations can run `migrations/002_project_file_uploads.sql` and `migrations/003_khqr_payment_intents.sql` manually.
+User document submissions are stored under `Tax-backend/uploads/documents` and tracked in `project_files` with a pending approval status. Uploads support PDF, JPG/PNG, TXT, DOC/DOCX, and XLS/XLSX up to 10 MB. The startup database initializer applies the schema and required metadata from `schema.sql`.
 
 ### ABA PayWay KHQR scan-to-pay setup
 
@@ -104,24 +104,7 @@ Use the App Password, never the normal Gmail password. App passwords may be unav
 
 ### Password reset database setup
 
-The startup initializer creates these tables. To apply the same change manually in MySQL, select `taxation_system` and run `migrations/001_password_resets.sql`:
-
-```sql
-ALTER TABLE users ADD COLUMN IF NOT EXISTS email VARCHAR(255) NULL;
-
-CREATE TABLE IF NOT EXISTS password_resets (
-	id INT AUTO_INCREMENT PRIMARY KEY,
-	user_id INT NOT NULL,
-	email VARCHAR(255) NOT NULL,
-	otp_hash VARCHAR(255) NOT NULL,
-	expires_at DATETIME NOT NULL,
-	is_used TINYINT(1) NOT NULL DEFAULT 0,
-	created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-	INDEX idx_password_resets_email (email),
-	INDEX idx_password_resets_user (user_id),
-	CONSTRAINT fk_password_resets_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-) ENGINE=InnoDB;
-```
+The startup initializer creates these tables. To apply the database structure manually in MySQL, run `schema.sql`.
 
 The API generates a random six-digit OTP, stores only its bcrypt hash, expires it after 10 minutes, and marks it used after a successful password reset.
 

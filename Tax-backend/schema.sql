@@ -191,6 +191,11 @@ CREATE TABLE IF NOT EXISTS project_files (
   FOREIGN KEY (reviewed_by) REFERENCES users(id) ON DELETE SET NULL
 ) ENGINE=InnoDB;
 
+ALTER TABLE project_files
+  MODIFY COLUMN project_id BIGINT NULL,
+  ADD COLUMN IF NOT EXISTS file_size BIGINT NULL,
+  ADD COLUMN IF NOT EXISTS mime_type VARCHAR(120) NULL;
+
 CREATE TABLE IF NOT EXISTS leave_requests (
   id BIGINT AUTO_INCREMENT PRIMARY KEY,
   start_date DATE NOT NULL,
@@ -381,6 +386,8 @@ CREATE TABLE IF NOT EXISTS password_resets (
   FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 ) ENGINE=InnoDB;
 
+ALTER TABLE users ADD COLUMN IF NOT EXISTS email VARCHAR(255) NULL;
+
 -- 18. Monthly Cambodian tax declaration
 CREATE TABLE IF NOT EXISTS tax_periods (
   id BIGINT AUTO_INCREMENT PRIMARY KEY,
@@ -436,6 +443,19 @@ CREATE TABLE IF NOT EXISTS sale_records (
   sale_type ENUM('non_taxable','export_0','taxable_person_10','local_consumer_10') NOT NULL DEFAULT 'local_consumer_10',
   taxable_amount_usd DECIMAL(16,2) NOT NULL DEFAULT 0.00,
   taxable_amount_khr DECIMAL(16,2) NOT NULL DEFAULT 0.00,
+  non_taxable_sale_usd DECIMAL(16,2) NOT NULL DEFAULT 0.00,
+  non_taxable_sale_khr DECIMAL(16,2) NOT NULL DEFAULT 0.00,
+  export_sale_usd DECIMAL(16,2) NOT NULL DEFAULT 0.00,
+  export_sale_khr DECIMAL(16,2) NOT NULL DEFAULT 0.00,
+  taxable_person_value_usd DECIMAL(16,2) NOT NULL DEFAULT 0.00,
+  taxable_person_value_khr DECIMAL(16,2) NOT NULL DEFAULT 0.00,
+  taxable_person_vat_usd DECIMAL(16,2) NOT NULL DEFAULT 0.00,
+  taxable_person_vat_khr DECIMAL(16,2) NOT NULL DEFAULT 0.00,
+  local_sale_value_usd DECIMAL(16,2) NOT NULL DEFAULT 0.00,
+  local_sale_value_khr DECIMAL(16,2) NOT NULL DEFAULT 0.00,
+  local_sale_vat_usd DECIMAL(16,2) NOT NULL DEFAULT 0.00,
+  local_sale_vat_khr DECIMAL(16,2) NOT NULL DEFAULT 0.00,
+  sale_categories_migrated TINYINT(1) NOT NULL DEFAULT 0,
   vat_rate DECIMAL(7,6) NOT NULL DEFAULT 0.100000,
   vat_amount_khr DECIMAL(16,2) NOT NULL DEFAULT 0.00,
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -444,6 +464,38 @@ CREATE TABLE IF NOT EXISTS sale_records (
   INDEX idx_sale_period_type (tax_period_id, sale_type),
   INDEX idx_sale_invoice (tax_period_id, invoice_date, invoice_no)
 ) ENGINE=InnoDB;
+
+ALTER TABLE sale_records
+  ADD COLUMN IF NOT EXISTS non_taxable_sale_usd DECIMAL(16,2) NOT NULL DEFAULT 0.00,
+  ADD COLUMN IF NOT EXISTS non_taxable_sale_khr DECIMAL(16,2) NOT NULL DEFAULT 0.00,
+  ADD COLUMN IF NOT EXISTS export_sale_usd DECIMAL(16,2) NOT NULL DEFAULT 0.00,
+  ADD COLUMN IF NOT EXISTS export_sale_khr DECIMAL(16,2) NOT NULL DEFAULT 0.00,
+  ADD COLUMN IF NOT EXISTS taxable_person_value_usd DECIMAL(16,2) NOT NULL DEFAULT 0.00,
+  ADD COLUMN IF NOT EXISTS taxable_person_value_khr DECIMAL(16,2) NOT NULL DEFAULT 0.00,
+  ADD COLUMN IF NOT EXISTS taxable_person_vat_usd DECIMAL(16,2) NOT NULL DEFAULT 0.00,
+  ADD COLUMN IF NOT EXISTS taxable_person_vat_khr DECIMAL(16,2) NOT NULL DEFAULT 0.00,
+  ADD COLUMN IF NOT EXISTS local_sale_value_usd DECIMAL(16,2) NOT NULL DEFAULT 0.00,
+  ADD COLUMN IF NOT EXISTS local_sale_value_khr DECIMAL(16,2) NOT NULL DEFAULT 0.00,
+  ADD COLUMN IF NOT EXISTS local_sale_vat_usd DECIMAL(16,2) NOT NULL DEFAULT 0.00,
+  ADD COLUMN IF NOT EXISTS local_sale_vat_khr DECIMAL(16,2) NOT NULL DEFAULT 0.00,
+  ADD COLUMN IF NOT EXISTS sale_categories_migrated TINYINT(1) NOT NULL DEFAULT 0;
+
+UPDATE sale_records
+SET
+  non_taxable_sale_usd = IF(sale_type = 'non_taxable', taxable_amount_usd, non_taxable_sale_usd),
+  non_taxable_sale_khr = IF(sale_type = 'non_taxable', taxable_amount_khr, non_taxable_sale_khr),
+  export_sale_usd = IF(sale_type = 'export_0', taxable_amount_usd, export_sale_usd),
+  export_sale_khr = IF(sale_type = 'export_0', taxable_amount_khr, export_sale_khr),
+  taxable_person_value_usd = IF(sale_type = 'taxable_person_10', taxable_amount_usd, taxable_person_value_usd),
+  taxable_person_value_khr = IF(sale_type = 'taxable_person_10', taxable_amount_khr, taxable_person_value_khr),
+  taxable_person_vat_usd = IF(sale_type = 'taxable_person_10', ROUND(taxable_amount_usd * vat_rate, 2), taxable_person_vat_usd),
+  taxable_person_vat_khr = IF(sale_type = 'taxable_person_10', vat_amount_khr, taxable_person_vat_khr),
+  local_sale_value_usd = IF(sale_type = 'local_consumer_10', taxable_amount_usd, local_sale_value_usd),
+  local_sale_value_khr = IF(sale_type = 'local_consumer_10', taxable_amount_khr, local_sale_value_khr),
+  local_sale_vat_usd = IF(sale_type = 'local_consumer_10', ROUND(taxable_amount_usd * vat_rate, 2), local_sale_vat_usd),
+  local_sale_vat_khr = IF(sale_type = 'local_consumer_10', vat_amount_khr, local_sale_vat_khr),
+  sale_categories_migrated = 1
+WHERE sale_categories_migrated = 0;
 
 CREATE TABLE IF NOT EXISTS salary_records (
   id BIGINT AUTO_INCREMENT PRIMARY KEY,
@@ -482,6 +534,118 @@ CREATE TABLE IF NOT EXISTS wht_records (
   FOREIGN KEY (tax_period_id) REFERENCES tax_periods(id) ON DELETE CASCADE,
   INDEX idx_wht_period_category (tax_period_id, category)
 ) ENGINE=InnoDB;
+
+UPDATE salary_records SET tax_rate = 0 WHERE tax_rate < 0 OR tax_rate > 1;
+ALTER TABLE salary_records MODIFY COLUMN tax_rate DECIMAL(7,6) NOT NULL DEFAULT 0.000000;
+ALTER TABLE salary_records MODIFY COLUMN tos_amount_khr DECIMAL(16,2) NOT NULL DEFAULT 0.00;
+
+CREATE TABLE IF NOT EXISTS annual_toi_returns (
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  company_name VARCHAR(180) NOT NULL,
+  enterprise_tin VARCHAR(50) NOT NULL,
+  tax_year SMALLINT UNSIGNED NOT NULL,
+  period_start DATE NULL,
+  period_end DATE NULL,
+  values_json JSON NOT NULL,
+  details_json JSON NULL,
+  calculations_json JSON NOT NULL,
+  status ENUM('draft','filed') NOT NULL DEFAULT 'draft',
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uq_annual_toi_enterprise_year (enterprise_tin, tax_year),
+  INDEX idx_annual_toi_year_status (tax_year, status)
+) ENGINE=InnoDB;
+
+ALTER TABLE annual_toi_returns ADD COLUMN IF NOT EXISTS details_json JSON NULL;
+
+CREATE TABLE IF NOT EXISTS wht_tax_objects (
+  object_code VARCHAR(60) PRIMARY KEY,
+  description VARCHAR(255) NOT NULL,
+  category ENUM('RESIDENT','NON_RESIDENT') NOT NULL,
+  default_tax_rate DECIMAL(5,4) NOT NULL,
+  CONSTRAINT chk_wht_object_rate CHECK (default_tax_rate >= 0 AND default_tax_rate <= 1)
+) ENGINE=InnoDB;
+
+INSERT INTO wht_tax_objects (object_code, description, category, default_tax_rate) VALUES
+  ('RES_SERVICE_ROYALTY_15', 'Performance of services and royalties', 'RESIDENT', 0.1500),
+  ('RES_NONBANK_INTEREST_15', 'Interest paid to non-bank entities', 'RESIDENT', 0.1500),
+  ('RES_FIXED_DEPOSIT_INTEREST_6', 'Interest on fixed-term deposits', 'RESIDENT', 0.0600),
+  ('RES_NONFIXED_SAVINGS_INTEREST_4', 'Interest on non-fixed savings', 'RESIDENT', 0.0400),
+  ('RES_RENTAL_LEGAL_PERSON_10', 'Rental of movable or immovable property: legal person', 'RESIDENT', 0.1000),
+  ('RES_RENTAL_PHYSICAL_PERSON_10', 'Rental of movable or immovable property: physical person', 'RESIDENT', 0.1000),
+  ('NR_INTEREST_14', 'Non-resident interest', 'NON_RESIDENT', 0.1400),
+  ('NR_ROYALTY_RENTAL_LEASE_14', 'Non-resident royalties, rental or lease', 'NON_RESIDENT', 0.1400),
+  ('NR_MANAGEMENT_TECHNICAL_SERVICE_14', 'Non-resident management and technical services', 'NON_RESIDENT', 0.1400),
+  ('NR_DIVIDEND_14', 'Non-resident dividends', 'NON_RESIDENT', 0.1400),
+  ('NR_OTHER_SERVICE_14', 'Non-resident other services', 'NON_RESIDENT', 0.1400),
+  ('LEGACY_RES_RENTAL_10', 'Legacy resident rental entry: confirm legal or physical person', 'RESIDENT', 0.1000),
+  ('LEGACY_NONRESIDENT_14', 'Legacy non-resident entry: confirm payment object', 'NON_RESIDENT', 0.1400)
+ON DUPLICATE KEY UPDATE
+  description = VALUES(description),
+  category = VALUES(category),
+  default_tax_rate = VALUES(default_tax_rate);
+
+CREATE TABLE IF NOT EXISTS wht_return_items (
+  id CHAR(36) PRIMARY KEY,
+  return_id BIGINT NOT NULL,
+  tax_object_code VARCHAR(60) NOT NULL,
+  base_amount DECIMAL(18,2) NOT NULL,
+  tax_rate DECIMAL(5,4) NOT NULL,
+  withholding_tax DECIMAL(18,2) NOT NULL,
+  remarks TEXT NULL,
+  legacy_wht_record_id BIGINT NULL UNIQUE,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  CONSTRAINT fk_wht_item_return FOREIGN KEY (return_id) REFERENCES tax_periods(id) ON DELETE CASCADE,
+  CONSTRAINT fk_wht_item_object FOREIGN KEY (tax_object_code) REFERENCES wht_tax_objects(object_code),
+  CONSTRAINT chk_wht_item_base CHECK (base_amount >= 0),
+  CONSTRAINT chk_wht_item_rate CHECK (tax_rate >= 0 AND tax_rate <= 1),
+  INDEX idx_wht_return_items_return (return_id, created_at)
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS wht_legacy_imports (
+  legacy_wht_record_id BIGINT PRIMARY KEY,
+  imported_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB;
+
+INSERT IGNORE INTO wht_return_items
+  (id, return_id, tax_object_code, base_amount, tax_rate, withholding_tax, remarks, legacy_wht_record_id)
+SELECT
+  UUID(),
+  legacy.tax_period_id,
+  CASE
+    WHEN legacy.wht_type = 'non_resident' THEN 'LEGACY_NONRESIDENT_14'
+    WHEN legacy.category = 'service_15' THEN 'RES_SERVICE_ROYALTY_15'
+    WHEN legacy.category = 'interest_non_bank_15' THEN 'RES_NONBANK_INTEREST_15'
+    WHEN legacy.category = 'fixed_deposit_6' THEN 'RES_FIXED_DEPOSIT_INTEREST_6'
+    WHEN legacy.category = 'savings_4' THEN 'RES_NONFIXED_SAVINGS_INTEREST_4'
+    WHEN legacy.category = 'rental_10' THEN 'LEGACY_RES_RENTAL_10'
+    ELSE 'LEGACY_NONRESIDENT_14'
+  END,
+  legacy.base_amount_khr,
+  legacy.wht_rate,
+  legacy.wht_amount_khr,
+  legacy.remarks,
+  legacy.id
+FROM wht_records AS legacy
+WHERE NOT EXISTS (
+  SELECT 1 FROM wht_legacy_imports AS imported WHERE imported.legacy_wht_record_id = legacy.id
+);
+
+UPDATE wht_return_items AS item
+JOIN wht_records AS legacy ON legacy.id = item.legacy_wht_record_id
+SET item.tax_object_code = CASE
+  WHEN legacy.wht_type = 'non_resident' THEN 'LEGACY_NONRESIDENT_14'
+  WHEN legacy.category = 'service_15' THEN 'RES_SERVICE_ROYALTY_15'
+  WHEN legacy.category = 'interest_non_bank_15' THEN 'RES_NONBANK_INTEREST_15'
+  WHEN legacy.category = 'fixed_deposit_6' THEN 'RES_FIXED_DEPOSIT_INTEREST_6'
+  WHEN legacy.category = 'savings_4' THEN 'RES_NONFIXED_SAVINGS_INTEREST_4'
+  WHEN legacy.category = 'rental_10' THEN 'LEGACY_RES_RENTAL_10'
+  ELSE 'LEGACY_NONRESIDENT_14'
+END;
+
+INSERT IGNORE INTO wht_legacy_imports (legacy_wht_record_id)
+SELECT id FROM wht_records;
 
 CREATE TABLE IF NOT EXISTS vat_returns (
   tax_period_id BIGINT PRIMARY KEY,
