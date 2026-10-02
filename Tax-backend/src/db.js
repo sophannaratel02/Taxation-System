@@ -75,9 +75,37 @@ async function initializeDatabase() {
     /^CREATE DATABASE IF NOT EXISTS taxation_system\s+CHARACTER SET utf8mb4\s+COLLATE utf8mb4_unicode_ci;\s*USE taxation_system;\s*/i,
     ''
   );
-  await pool.query(schemaForConfiguredDatabase);
+  const salesCategoryMigration = schemaForConfiguredDatabase.match(
+    /-- BEGIN SALES CATEGORY DATA MIGRATION\s*([\s\S]*?)\s*-- END SALES CATEGORY DATA MIGRATION/
+  );
+  const schemaWithoutSalesCategoryMigration = schemaForConfiguredDatabase.replace(
+    /-- BEGIN SALES CATEGORY DATA MIGRATION[\s\S]*?-- END SALES CATEGORY DATA MIGRATION\s*/,
+    ''
+  );
+  await pool.query(schemaWithoutSalesCategoryMigration);
+
+  const salesCategoryColumns = [
+    ['non_taxable_sale_usd', 'DECIMAL(16,2) NOT NULL DEFAULT 0.00'],
+    ['non_taxable_sale_khr', 'DECIMAL(16,2) NOT NULL DEFAULT 0.00'],
+    ['export_sale_usd', 'DECIMAL(16,2) NOT NULL DEFAULT 0.00'],
+    ['export_sale_khr', 'DECIMAL(16,2) NOT NULL DEFAULT 0.00'],
+    ['taxable_person_value_usd', 'DECIMAL(16,2) NOT NULL DEFAULT 0.00'],
+    ['taxable_person_value_khr', 'DECIMAL(16,2) NOT NULL DEFAULT 0.00'],
+    ['taxable_person_vat_usd', 'DECIMAL(16,2) NOT NULL DEFAULT 0.00'],
+    ['taxable_person_vat_khr', 'DECIMAL(16,2) NOT NULL DEFAULT 0.00'],
+    ['local_sale_value_usd', 'DECIMAL(16,2) NOT NULL DEFAULT 0.00'],
+    ['local_sale_value_khr', 'DECIMAL(16,2) NOT NULL DEFAULT 0.00'],
+    ['local_sale_vat_usd', 'DECIMAL(16,2) NOT NULL DEFAULT 0.00'],
+    ['local_sale_vat_khr', 'DECIMAL(16,2) NOT NULL DEFAULT 0.00'],
+    ['sale_categories_migrated', 'TINYINT(1) NOT NULL DEFAULT 0'],
+  ];
+  for (const [columnName, definition] of salesCategoryColumns) {
+    await addColumnIfMissing('sale_records', columnName, definition);
+  }
+  if (salesCategoryMigration) await pool.query(salesCategoryMigration[1]);
 
   await addColumnIfMissing('sale_records', 'quantity', 'DECIMAL(14,3) NOT NULL DEFAULT 1.000');
+  await addColumnIfMissing('annual_toi_returns', 'details_json', 'JSON NULL');
 
   await addColumnIfMissing('tax_periods', 'previous_vat_credit_khr', 'DECIMAL(16,2) NOT NULL DEFAULT 0.00');
   await addColumnIfMissing('tax_periods', 'previous_top_credit_khr', 'DECIMAL(16,2) NOT NULL DEFAULT 0.00');

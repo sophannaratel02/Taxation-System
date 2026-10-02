@@ -191,11 +191,6 @@ CREATE TABLE IF NOT EXISTS project_files (
   FOREIGN KEY (reviewed_by) REFERENCES users(id) ON DELETE SET NULL
 ) ENGINE=InnoDB;
 
-ALTER TABLE project_files
-  MODIFY COLUMN project_id BIGINT NULL,
-  ADD COLUMN IF NOT EXISTS file_size BIGINT NULL,
-  ADD COLUMN IF NOT EXISTS mime_type VARCHAR(120) NULL;
-
 CREATE TABLE IF NOT EXISTS leave_requests (
   id BIGINT AUTO_INCREMENT PRIMARY KEY,
   start_date DATE NOT NULL,
@@ -386,8 +381,6 @@ CREATE TABLE IF NOT EXISTS password_resets (
   FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 ) ENGINE=InnoDB;
 
-ALTER TABLE users ADD COLUMN IF NOT EXISTS email VARCHAR(255) NULL;
-
 -- 18. Monthly Cambodian tax declaration
 CREATE TABLE IF NOT EXISTS tax_periods (
   id BIGINT AUTO_INCREMENT PRIMARY KEY,
@@ -465,21 +458,7 @@ CREATE TABLE IF NOT EXISTS sale_records (
   INDEX idx_sale_invoice (tax_period_id, invoice_date, invoice_no)
 ) ENGINE=InnoDB;
 
-ALTER TABLE sale_records
-  ADD COLUMN IF NOT EXISTS non_taxable_sale_usd DECIMAL(16,2) NOT NULL DEFAULT 0.00,
-  ADD COLUMN IF NOT EXISTS non_taxable_sale_khr DECIMAL(16,2) NOT NULL DEFAULT 0.00,
-  ADD COLUMN IF NOT EXISTS export_sale_usd DECIMAL(16,2) NOT NULL DEFAULT 0.00,
-  ADD COLUMN IF NOT EXISTS export_sale_khr DECIMAL(16,2) NOT NULL DEFAULT 0.00,
-  ADD COLUMN IF NOT EXISTS taxable_person_value_usd DECIMAL(16,2) NOT NULL DEFAULT 0.00,
-  ADD COLUMN IF NOT EXISTS taxable_person_value_khr DECIMAL(16,2) NOT NULL DEFAULT 0.00,
-  ADD COLUMN IF NOT EXISTS taxable_person_vat_usd DECIMAL(16,2) NOT NULL DEFAULT 0.00,
-  ADD COLUMN IF NOT EXISTS taxable_person_vat_khr DECIMAL(16,2) NOT NULL DEFAULT 0.00,
-  ADD COLUMN IF NOT EXISTS local_sale_value_usd DECIMAL(16,2) NOT NULL DEFAULT 0.00,
-  ADD COLUMN IF NOT EXISTS local_sale_value_khr DECIMAL(16,2) NOT NULL DEFAULT 0.00,
-  ADD COLUMN IF NOT EXISTS local_sale_vat_usd DECIMAL(16,2) NOT NULL DEFAULT 0.00,
-  ADD COLUMN IF NOT EXISTS local_sale_vat_khr DECIMAL(16,2) NOT NULL DEFAULT 0.00,
-  ADD COLUMN IF NOT EXISTS sale_categories_migrated TINYINT(1) NOT NULL DEFAULT 0;
-
+-- BEGIN SALES CATEGORY DATA MIGRATION
 UPDATE sale_records
 SET
   non_taxable_sale_usd = IF(sale_type = 'non_taxable', taxable_amount_usd, non_taxable_sale_usd),
@@ -496,6 +475,7 @@ SET
   local_sale_vat_khr = IF(sale_type = 'local_consumer_10', vat_amount_khr, local_sale_vat_khr),
   sale_categories_migrated = 1
 WHERE sale_categories_migrated = 0;
+-- END SALES CATEGORY DATA MIGRATION
 
 CREATE TABLE IF NOT EXISTS salary_records (
   id BIGINT AUTO_INCREMENT PRIMARY KEY,
@@ -555,8 +535,6 @@ CREATE TABLE IF NOT EXISTS annual_toi_returns (
   UNIQUE KEY uq_annual_toi_enterprise_year (enterprise_tin, tax_year),
   INDEX idx_annual_toi_year_status (tax_year, status)
 ) ENGINE=InnoDB;
-
-ALTER TABLE annual_toi_returns ADD COLUMN IF NOT EXISTS details_json JSON NULL;
 
 CREATE TABLE IF NOT EXISTS wht_tax_objects (
   object_code VARCHAR(60) PRIMARY KEY,
