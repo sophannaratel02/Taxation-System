@@ -2,9 +2,10 @@ const crypto = require('crypto');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { pool } = require('../db');
+const { resolveJwtSecret } = require('../config/runtime');
 const { transporter, mailFrom, mailConfigurationError, passwordResetEmail } = require('../config/mailer');
 
-const jwtSecret = process.env.JWT_SECRET || 'development-secret-change-me';
+const jwtSecret = resolveJwtSecret();
 
 function wasRecipientAccepted(message, email) {
   return (message.accepted || []).some((recipient) => {

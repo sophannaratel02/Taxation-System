@@ -1,6 +1,7 @@
 const jwt = require('jsonwebtoken');
+const { resolveJwtSecret } = require('../config/runtime');
 
-const jwtSecret = process.env.JWT_SECRET || 'development-secret-change-me';
+const jwtSecret = resolveJwtSecret();
 
 function authenticate(req, res, next) {
   const token = req.headers.authorization?.replace('Bearer ', '');

@@ -369,6 +369,7 @@
 import { computed, reactive, ref } from 'vue';
 import { useTaxStore } from '@/stores/tax';
 import { useLanguageStore } from '@/stores/language';
+import { alertDialog, confirmDialog } from '@/utils/dialog';
 
 const tax = useTaxStore();
 const language = useLanguageStore();
@@ -494,6 +495,7 @@ function closeModal() {
 }
 
 async function saveForm() {
+  const updating = isEditing.value && Boolean(editingId.value);
   saving.value = true;
   try {
     const payload = {
@@ -508,8 +510,26 @@ async function saveForm() {
       await tax.saveCustomer(payload);
     }
     closeModal();
+
+    await alertDialog({
+      title: language.isKhmer
+        ? (updating ? 'បានធ្វើបច្ចុប្បន្នភាពអតិថិជន' : 'បានបន្ថែមអតិថិជន')
+        : (updating ? 'Customer updated' : 'Customer added'),
+      message: language.isKhmer
+        ? (updating ? 'បានរក្សាទុកការកែប្រែព័ត៌មានអតិថិជនដោយជោគជ័យ។' : 'បានបន្ថែមអតិថិជនថ្មីដោយជោគជ័យ។')
+        : (updating ? 'Customer details were updated successfully.' : 'The customer was added successfully.'),
+      variant: 'success',
+      confirmText: language.isKhmer ? 'យល់ព្រម' : 'OK',
+    });
   } catch (err) {
-    console.error('Error saving customer:', err);
+    await alertDialog({
+      title: language.isKhmer ? 'រក្សាទុកអតិថិជនបរាជ័យ' : 'Unable to save customer',
+      message: err?.response?.data?.message || err.message || (
+        language.isKhmer ? 'មិនអាចរក្សាទុកព័ត៌មានអតិថិជនបានទេ។' : 'The customer could not be saved.'
+      ),
+      variant: 'danger',
+      confirmText: language.isKhmer ? 'យល់ព្រម' : 'OK',
+    });
   } finally {
     saving.value = false;
   }
@@ -520,7 +540,14 @@ async function deleteCust(cust) {
     ? `តើអ្នកប្រាកដថាចង់លុបអតិថិជន "${cust.name}" មែនទេ?`
     : `Are you sure you want to delete "${cust.name}"?`;
 
-  if (!window.confirm(confirmText)) return;
+  const confirmed = await confirmDialog({
+    title: language.isKhmer ? 'លុបអតិថិជន' : 'Delete customer',
+    message: confirmText,
+    variant: 'danger',
+    confirmText: language.isKhmer ? 'លុប' : 'Delete',
+  });
+
+  if (!confirmed) return;
 
   try {
     await tax.deleteCustomer(cust.id);

@@ -138,6 +138,7 @@
 import { computed, ref } from 'vue';
 import { useTaxStore } from '@/stores/tax';
 import { useLanguageStore } from '@/stores/language';
+import { alertDialog, confirmDialog } from '@/utils/dialog';
 
 const tax = useTaxStore();
 const language = useLanguageStore();
@@ -197,7 +198,23 @@ function getStatusBadge(item) {
 
 async function deleteItem(item) {
   const message = language.isKhmer ? `លុបទំនិញ "${item.nameEn}" មែនទេ? ប្រវត្តិស្តុកនឹងនៅរក្សាទុក។` : `Archive "${item.nameEn}"? Stock and invoice history will be preserved.`;
-  if (!window.confirm(message)) return;
-  try { await tax.deleteItem(item.id); } catch (error) { window.alert(error.message || 'Unable to delete item.'); }
+  const confirmed = await confirmDialog({
+    title: language.isKhmer ? 'លុបទំនិញ' : 'Delete item',
+    message,
+    variant: 'danger',
+    confirmText: language.isKhmer ? 'លុប' : 'Delete',
+  });
+  if (!confirmed) return;
+
+  try {
+    await tax.deleteItem(item.id);
+  } catch (error) {
+    await alertDialog({
+      title: language.isKhmer ? 'លុបបរាជ័យ' : 'Delete failed',
+      message: error.message || 'Unable to delete item.',
+      variant: 'danger',
+      confirmText: 'OK',
+    });
+  }
 }
 </script>

@@ -19,7 +19,7 @@ const smtpConfig = {
   host: String(process.env.SMTP_HOST || '').trim(),
   port: Number(process.env.SMTP_PORT || 587),
   user: String(process.env.SMTP_USER || '').trim(),
-  pass: String(process.env.SMTP_PASSWORD || ''),
+  pass: String(process.env.SMTP_PASSWORD || '').trim(),
   from: String(process.env.SMTP_FROM || '').trim(),
   secureInput: String(process.env.SMTP_SECURE || '').trim().toLowerCase(),
 };
@@ -61,6 +61,10 @@ const mailConfigurationError =
 
 const mailFrom = resolvedSmtpFrom;
 
+function hasUsableMailConfiguration() {
+  return Boolean(isCustomSmtpComplete || isGmailValid);
+}
+
 // --------------------------------------------------
 // Transporter Initialization
 // --------------------------------------------------
@@ -99,6 +103,12 @@ async function verifyTransporter() {
     const warning =
       mailConfigurationError ||
       'Password reset email is disabled. Configure SMTP_HOST/SMTP_USER/SMTP_PASSWORD or GMAIL_USER/GMAIL_APP_PASSWORD in Tax-backend/.env.';
+    console.warn(warning);
+    return false;
+  }
+
+  if (!hasUsableMailConfiguration() || !mailFrom || !EMAIL_REGEX.test(String(mailFrom))) {
+    const warning = 'Mail sender configuration is invalid. Set a valid SMTP_FROM address or GMAIL_USER before enabling password reset emails.';
     console.warn(warning);
     return false;
   }
@@ -157,4 +167,5 @@ module.exports = {
   mailConfigurationError,
   passwordResetEmail,
   verifyTransporter,
+  hasUsableMailConfiguration,
 };

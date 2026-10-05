@@ -61,7 +61,7 @@
     </div>
 
     <!-- Dynamic User Form Modal / Card -->
-    <div v-if="showForm" class="card border-0 shadow-sm rounded-3 p-4 mb-4 backdrop-card">
+    <div v-if="showForm" ref="userFormCard" class="card border-0 shadow-sm rounded-3 p-4 mb-4 backdrop-card">
       <div class="d-flex justify-content-between align-items-center pb-3 mb-3 border-bottom">
         <div class="d-flex align-items-center gap-2">
           <span class="p-2 bg-primary-subtle text-primary rounded-circle">
@@ -291,9 +291,10 @@
 </template>
 
 <script setup>
-import { computed, onMounted, reactive, ref } from 'vue';
+import { computed, nextTick, onMounted, reactive, ref } from 'vue';
 import { api } from '@/services/api';
 import { useLanguageStore } from '@/stores/language';
+import { alertDialog, confirmDialog } from '@/utils/dialog';
 
 const language = useLanguageStore();
 
@@ -302,6 +303,7 @@ const isEditing = ref(false);
 const saving = ref(false);
 const error = ref('');
 const successMessage = ref('');
+const userFormCard = ref(null);
 const users = ref([]);
 const search = ref('');
 const roleFilter = ref('');
@@ -358,12 +360,14 @@ function openCreateModal() {
   successMessage.value = '';
 }
 
-function openEditModal(user) {
+async function openEditModal(user) {
   isEditing.value = true;
   editingUserId.value = user.id;
   Object.assign(userForm, { name: user.name, username: user.username, email: user.email || '', password: '', role: user.role });
   showForm.value = true;
   error.value = '';
+  await nextTick();
+  userFormCard.value?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 function closeForm() {
@@ -417,7 +421,14 @@ async function toggleUser(user) {
   const promptText = language.isKhmer
     ? `${user.active ? 'ផ្អាក' : 'បើកដំណើរការ'} គណនី ${user.name} មែនទេ?`
     : `${user.active ? 'Deactivate' : 'Activate'} ${user.name}'s account?`;
-  if (!window.confirm(promptText)) return;
+
+  const confirmed = await confirmDialog({
+    title: language.isKhmer ? 'ប្តូរស្ថានភាពគណនី' : 'Update account status',
+    message: promptText,
+    variant: user.active ? 'warning' : 'success',
+    confirmText: user.active ? (language.isKhmer ? 'ផ្អាក' : 'Deactivate') : (language.isKhmer ? 'បើក' : 'Activate'),
+  });
+  if (!confirmed) return;
 
   try {
     const result = await api.updateAdminUser(user.id, { active: !user.active });
@@ -441,18 +452,35 @@ async function removeUser(user) {
     ? `តើអ្នកប្រាកដថាចង់លុបអ្នកប្រើប្រាស់ "${user.name}" មែនទេ?`
     : `Are you sure you want to delete "${user.name}"?`;
 
-  if (!window.confirm(confirmText)) return;
+  const confirmed = await confirmDialog({
+    title: language.isKhmer ? 'លុបអ្នកប្រើប្រាស់' : 'Delete user',
+    message: confirmText,
+    variant: 'danger',
+    confirmText: language.isKhmer ? 'លុប' : 'Delete',
+  });
+  if (!confirmed) return;
+
+  error.value = '';
+  successMessage.value = '';
 
   try {
     const result = await api.deleteAdminUser(user.id);
     if (result.deactivated) {
       user.active = false;
-      successMessage.value = language.isKhmer
-        ? 'អ្នកប្រើប្រាស់មានប្រវត្តិដែលត្រូវរក្សាទុក ដូច្នេះគណនីត្រូវបានផ្អាក។'
-        : 'This user has linked history, so the account was deactivated instead.';
+      await alertDialog({
+        title: language.isKhmer ? 'បានផ្អាកគណនី' : 'Account deactivated',
+        message: language.isKhmer
+          ? 'អ្នកប្រើប្រាស់មានប្រវត្តិដែលត្រូវរក្សាទុក ដូច្នេះគណនីត្រូវបានផ្អាក។'
+          : 'This user has linked history, so the account was deactivated instead.',
+        variant: 'success',
+      });
     } else {
       users.value = users.value.filter((item) => item.id !== user.id);
-      successMessage.value = language.isKhmer ? 'បានលុបអ្នកប្រើប្រាស់។' : 'User deleted successfully.';
+      await alertDialog({
+        title: language.isKhmer ? 'បានលុបអ្នកប្រើប្រាស់' : 'User deleted',
+        message: language.isKhmer ? 'បានលុបអ្នកប្រើប្រាស់ដោយជោគជ័យ។' : 'User deleted successfully.',
+        variant: 'success',
+      });
     }
   } catch (requestError) {
     error.value = requestError.message || (

@@ -82,6 +82,7 @@ import { computed, onMounted, reactive, ref } from 'vue';
 import { useTaxStore } from '@/stores/tax';
 import { useLanguageStore } from '@/stores/language';
 import { api } from '@/services/api';
+import { confirmDialog } from '@/utils/dialog';
 
 const tax = useTaxStore();
 const language = useLanguageStore();
@@ -156,7 +157,14 @@ async function savePolicy() {
 }
 
 async function deleteNotes() {
-  if (!window.confirm(language.isKhmer ? 'លុបកំណត់ត្រាគោលការណ៍នេះមែនទេ?' : 'Delete these policy notes?')) return;
+  const confirmed = await confirmDialog({
+    title: language.isKhmer ? 'លុបកំណត់ត្រាគោលការណ៍' : 'Delete policy notes',
+    message: language.isKhmer ? 'លុបកំណត់ត្រាគោលការណ៍នេះមែនទេ?' : 'Delete these policy notes?',
+    variant: 'danger',
+    confirmText: language.isKhmer ? 'លុប' : 'Delete',
+  });
+  if (!confirmed) return;
+
   saving.value = true;
   error.value = '';
   try {
@@ -164,7 +172,7 @@ async function deleteNotes() {
     form.documents.notes = '';
     success.value = true;
   } catch (requestError) {
-    error.value = requestError.message || (language.isKhmer ? 'មិនអាចលុបកំណត់ត្រាបានទេ។' : 'Unable to delete policy notes.');
+    error.value = requestError.message || (language.isKhmer ? 'មិនអาจលុបកំណត់ត្រាបានទេ។' : 'Unable to delete policy notes.');
   } finally {
     saving.value = false;
   }

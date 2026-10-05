@@ -658,6 +658,7 @@
 <script setup>
 import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { api } from '@/services/api';
+import { alertDialog, confirmDialog } from '@/utils/dialog';
 import { useLanguageStore } from '@/stores/language';
 import SalesJournalView from '@/components/SalesJournalView.vue';
 import WithholdingTaxEntry from '@/components/WithholdingTaxEntry.vue';
@@ -1130,6 +1131,8 @@ async function saveRecord() {
   saving.value = true;
   error.value = '';
   success.value = '';
+  const isEditing = Boolean(editingId.value);
+  let feedback;
 
   try {
     const payload = { ...recordForm };
@@ -1172,18 +1175,34 @@ async function saveRecord() {
     if (index !== -1) targetList.splice(index, 1, savedRecord);
 
     resetForm();
-    success.value = isKhmer.value ? 'បានរក្សាទុកកំណត់ត្រា និងគណនាពន្ធឡើងវិញ។' : 'Entry saved and tax calculations refreshed.';
+    feedback = {
+      title: isKhmer.value ? 'បានរក្សាទុកកំណត់ត្រា' : (isEditing ? 'Entry updated' : 'Entry added'),
+      message: isKhmer.value
+        ? `${isEditing ? 'បានកែប្រែ' : 'បានបន្ថែម'}កំណត់ត្រា និងគណនាពន្ធឡើងវិញដោយជោគជ័យ។`
+        : `Entry ${isEditing ? 'updated' : 'added'} successfully and tax calculations refreshed.`,
+      variant: 'success',
+      confirmText: isKhmer.value ? 'យល់ព្រម' : 'OK',
+    };
   } catch (err) {
-    error.value = err?.response?.data?.message || err.message;
+    feedback = {
+      title: isKhmer.value ? 'រក្សាទុកកំណត់ត្រាបរាជ័យ' : 'Unable to save entry',
+      message: err?.response?.data?.message || err.message,
+      variant: 'danger',
+      confirmText: isKhmer.value ? 'យល់ព្រម' : 'OK',
+    };
   } finally {
     saving.value = false;
   }
+
+  await alertDialog(feedback);
 }
 
 async function saveSalesRecord({ id, payload }) {
   saving.value = true;
   error.value = '';
   success.value = '';
+  const isEditing = Boolean(id);
+  let feedback;
 
   try {
     const saved = id
@@ -1195,18 +1214,33 @@ async function saveSalesRecord({ id, payload }) {
     if (index !== -1) records.sales.splice(index, 1, saved);
 
     salesJournalRef.value?.resetForm();
-    success.value = isKhmer.value ? 'បានរក្សាទុកកំណត់ត្រាលក់។' : 'Sales entry saved.';
+    feedback = {
+      title: isKhmer.value ? 'បានរក្សាទុកកំណត់ត្រាលក់' : (isEditing ? 'Sales entry updated' : 'Sales entry added'),
+      message: isKhmer.value
+        ? `${isEditing ? 'បានកែប្រែ' : 'បានបន្ថែម'}កំណត់ត្រាលក់ដោយជោគជ័យ។`
+        : `Sales entry ${isEditing ? 'updated' : 'added'} successfully.`,
+      variant: 'success',
+      confirmText: isKhmer.value ? 'យល់ព្រម' : 'OK',
+    };
   } catch (err) {
-    error.value = err?.response?.data?.message || err.message;
+    feedback = {
+      title: isKhmer.value ? 'រក្សាទុកកំណត់ត្រាលក់បរាជ័យ' : 'Unable to save sales entry',
+      message: err?.response?.data?.message || err.message,
+      variant: 'danger',
+      confirmText: isKhmer.value ? 'យល់ព្រម' : 'OK',
+    };
   } finally {
     saving.value = false;
   }
+
+  await alertDialog(feedback);
 }
 
 async function saveWhtItems(items) {
   saving.value = true;
   error.value = '';
   success.value = '';
+  let feedback;
 
   try {
     const result = await api.saveMonthlyWhtItems({
@@ -1216,17 +1250,38 @@ async function saveWhtItems(items) {
     });
     records.wht = result.items || [];
     summary.value = await api.taxSummary(selectedPeriodId.value);
-    success.value = isKhmer.value ? 'បានរក្សាទុកធាតុពន្ធកាត់ទុកទាំងអស់។' : 'WHT items saved and recalculated.';
+    feedback = {
+      title: isKhmer.value ? 'បានរក្សាទុកពន្ធកាត់ទុក' : 'Withholding tax entries saved',
+      message: isKhmer.value
+        ? 'បានរក្សាទុកធាតុពន្ធកាត់ទុកទាំងអស់ និងគណនាឡើងវិញដោយជោគជ័យ។'
+        : 'Withholding tax entries were saved and recalculated successfully.',
+      variant: 'success',
+      confirmText: isKhmer.value ? 'យល់ព្រម' : 'OK',
+    };
   } catch (err) {
-    error.value = err.message;
+    feedback = {
+      title: isKhmer.value ? 'រក្សាទុកពន្ធកាត់ទុកបរាជ័យ' : 'Unable to save withholding tax entries',
+      message: err?.response?.data?.message || err.message,
+      variant: 'danger',
+      confirmText: isKhmer.value ? 'យល់ព្រម' : 'OK',
+    };
   } finally {
     saving.value = false;
   }
+
+  await alertDialog(feedback);
 }
 
 async function deleteSalesRecord(row) {
   const confirmMsg = isKhmer.value ? 'លុបកំណត់ត្រានេះ?' : 'Delete this sales record?';
-  if (!window.confirm(confirmMsg)) return;
+  const confirmed = await confirmDialog({
+    title: isKhmer.value ? 'លុបកំណត់ត្រាលក់' : 'Delete sales record',
+    message: confirmMsg,
+    variant: 'danger',
+    confirmText: isKhmer.value ? 'លុប' : 'Delete',
+  });
+
+  if (!confirmed) return;
 
   try {
     await api.deleteTaxRecord(selectedPeriodId.value, 'sales', row.id);
@@ -1257,7 +1312,14 @@ function editRecord(row) {
 
 async function removeRecord(row) {
   const confirmMsg = isKhmer.value ? 'លុបកំណត់ត្រានេះ?' : 'Delete this tax record?';
-  if (!window.confirm(confirmMsg)) return;
+  const confirmed = await confirmDialog({
+    title: isKhmer.value ? 'លុបកំណត់ត្រាពន្ធ' : 'Delete tax record',
+    message: confirmMsg,
+    variant: 'danger',
+    confirmText: isKhmer.value ? 'លុប' : 'Delete',
+  });
+
+  if (!confirmed) return;
 
   try {
     await api.deleteTaxRecord(selectedPeriodId.value, recordKind.value, row.id);

@@ -53,6 +53,7 @@ import { onMounted, ref, watch } from 'vue';
 import { api } from '@/services/api';
 import { useTaxStore } from '@/stores/tax';
 import { useLanguageStore } from '@/stores/language';
+import { confirmDialog } from '@/utils/dialog';
 
 const tax = useTaxStore();
 const language = useLanguageStore();
@@ -66,7 +67,28 @@ const result = ref('');
 function formatDate(value) { return value ? new Date(value).toLocaleString() : '-'; }
 async function load() { try { register.value = await api.currentRegister(branch.value); } catch (requestError) { error.value = requestError.message; } }
 async function openRegister() { saving.value = true; error.value = ''; try { register.value = await api.openRegister({ branch: branch.value, startingCash: cash.value }); result.value = language.isKhmer ? 'វេនត្រូវបានបើកដោយជោគជ័យ។' : 'Register opened successfully.'; } catch (requestError) { error.value = requestError.message; } finally { saving.value = false; } }
-async function closeRegister() { if (!window.confirm(language.isKhmer ? 'បិទវេនលក់នេះមែនទេ?' : 'Close this register?')) return; saving.value = true; error.value = ''; try { const report = await api.closeRegister({ branch: branch.value, countedCash: cash.value }); register.value = null; result.value = `${language.isKhmer ? 'Z-Report រួចរាល់។ ភាពខុសគ្នា' : 'Z-Report complete. Cash variance'}: $${Number(report.variance).toFixed(2)}`; } catch (requestError) { error.value = requestError.message; } finally { saving.value = false; } }
+async function closeRegister() {
+  const confirmed = await confirmDialog({
+    title: language.isKhmer ? 'បិទវេនលក់' : 'Close register',
+    message: language.isKhmer ? 'បិទវេនលក់នេះមែនទេ?' : 'Close this register?',
+    variant: 'warning',
+    confirmText: language.isKhmer ? 'បិទ' : 'Close',
+  });
+
+  if (!confirmed) return;
+
+  saving.value = true;
+  error.value = '';
+  try {
+    const report = await api.closeRegister({ branch: branch.value, countedCash: cash.value });
+    register.value = null;
+    result.value = `${language.isKhmer ? 'Z-Report រួចរាល់។ ភាពខុសគ្នា' : 'Z-Report complete. Cash variance'}: $${Number(report.variance).toFixed(2)}`;
+  } catch (requestError) {
+    error.value = requestError.message;
+  } finally {
+    saving.value = false;
+  }
+}
 watch(branch, load);
 onMounted(load);
 </script>

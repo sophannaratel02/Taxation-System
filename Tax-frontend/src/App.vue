@@ -1,4 +1,24 @@
 <template>
+  <Transition name="dialog-fade">
+    <div v-if="dialog.open" class="global-dialog-backdrop" @click.self="closeDialog(false)">
+      <div class="global-dialog" role="dialog" aria-modal="true" :aria-labelledby="dialogTitleId">
+        <div class="global-dialog-icon" :class="`tone-${dialog.variant}`">
+          <i :class="dialog.icon" aria-hidden="true"></i>
+        </div>
+        <h2 :id="dialogTitleId" class="global-dialog-title">{{ dialog.title }}</h2>
+        <p class="global-dialog-message">{{ dialog.message }}</p>
+        <div class="global-dialog-actions">
+          <button v-if="dialog.showCancel" type="button" class="btn btn-light border" @click="closeDialog(false)">
+            {{ dialog.cancelText }}
+          </button>
+          <button type="button" class="btn" :class="confirmButtonClass" @click="closeDialog(true)">
+            {{ dialog.confirmText }}
+          </button>
+        </div>
+      </div>
+    </div>
+  </Transition>
+
   <RouterView v-if="route.meta.public" />
 
   <div v-else class="d-flex flex-column vh-100 app-shell">
@@ -293,6 +313,7 @@ import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useLanguageStore } from './stores/language';
 import { useTaxStore } from './stores/tax';
+import { closeDialog, dialogState } from './utils/dialog';
 import logoUrl from './assets/logo.svg';
 
 const route = useRoute();
@@ -303,6 +324,13 @@ const tax = useTaxStore();
 const sidebarOpen = ref(false);
 const profileOpen = ref(false);
 const profileDropdownRef = ref(null);
+const dialog = dialogState;
+const dialogTitleId = 'app-global-dialog-title';
+const confirmButtonClass = computed(() => {
+  if (dialog.variant === 'success') return 'btn-success';
+  if (dialog.variant === 'danger') return 'btn-danger';
+  return 'btn-primary';
+});
 
 function getSafeStoredUser() {
   try {
@@ -651,6 +679,80 @@ function logout() {
   .brand-link .leading-tight {
     display: none !important;
   }
+}
+
+.global-dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+  background: rgba(15, 23, 42, 0.52);
+  backdrop-filter: blur(4px);
+}
+
+.global-dialog {
+  width: min(100%, 420px);
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 20px;
+  box-shadow: 0 24px 60px rgba(15, 23, 42, 0.2);
+  padding: 2rem 1.5rem 1.25rem;
+  text-align: center;
+}
+
+.global-dialog-icon {
+  width: 64px;
+  height: 64px;
+  border-radius: 16px;
+  display: grid;
+  place-items: center;
+  font-size: 1.85rem;
+  margin: 0 auto 1rem;
+}
+
+.global-dialog-icon.tone-warning { background: #fff7ed; color: #d97706; }
+.global-dialog-icon.tone-danger { background: #fef2f2; color: #dc2626; }
+.global-dialog-icon.tone-success { background: #ecfdf5; color: #16a34a; }
+.global-dialog-icon.tone-info { background: #eff6ff; color: #2563eb; }
+
+.global-dialog-title {
+  margin: 0;
+  font-size: 1.28rem;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.global-dialog-message {
+  margin: 0.75rem 0 1.25rem;
+  color: #475569;
+  line-height: 1.6;
+  white-space: pre-line;
+}
+
+.global-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+
+.dialog-fade-enter-active,
+.dialog-fade-leave-active {
+  transition: opacity 0.18s ease, transform 0.18s ease;
+}
+
+.dialog-fade-enter-from,
+.dialog-fade-leave-to {
+  opacity: 0;
+  transform: translateY(10px) scale(0.98);
+}
+
+.dialog-fade-enter-to,
+.dialog-fade-leave-from {
+  opacity: 1;
+  transform: translateY(0) scale(1);
 }
 
 @media print {

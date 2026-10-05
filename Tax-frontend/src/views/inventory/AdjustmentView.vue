@@ -168,15 +168,6 @@
             }}
           </button>
 
-          <!-- Feedback Alerts -->
-          <div v-if="success" class="alert alert-success mt-3 mb-0 py-2 d-flex align-items-center rounded-3">
-            <i class="bi bi-check-circle-fill me-2 fs-5"></i>
-            <div>{{ language.isKhmer ? 'បានកែសម្រួលស្តុកជោគជ័យ!' : 'Stock adjusted successfully!' }}</div>
-          </div>
-          <div v-if="errorMessage" class="alert alert-danger mt-3 mb-0 py-2 d-flex align-items-center rounded-3">
-            <i class="bi bi-exclamation-triangle-fill me-2 fs-5"></i>
-            <div>{{ errorMessage }}</div>
-          </div>
         </form>
       </div>
 
@@ -266,12 +257,11 @@
 import { computed, reactive, ref, watch } from 'vue';
 import { useTaxStore } from '@/stores/tax';
 import { useLanguageStore } from '@/stores/language';
+import { alertDialog } from '@/utils/dialog';
 
 const tax = useTaxStore();
 const language = useLanguageStore();
 
-const success = ref(false);
-const errorMessage = ref('');
 const isSubmitting = ref(false);
 
 const form = reactive({
@@ -333,9 +323,14 @@ async function submit() {
   const qty = Number(form.quantity);
 
   if (!qty || qty === 0) {
-    errorMessage.value = language.isKhmer
-      ? 'បរិមាណកែតម្រូវមិនអាចស្មើ 0 បានទេ!'
-      : 'Adjustment quantity cannot be 0.';
+    await alertDialog({
+      title: language.isKhmer ? 'បរិមាណមិនត្រឹមត្រូវ' : 'Invalid quantity',
+      message: language.isKhmer
+        ? 'បរិមាណកែតម្រូវមិនអាចស្មើ 0 បានទេ!'
+        : 'Adjustment quantity cannot be 0.',
+      variant: 'danger',
+      confirmText: language.isKhmer ? 'យល់ព្រម' : 'OK',
+    });
     return;
   }
 
@@ -343,14 +338,18 @@ async function submit() {
 
   // Validate to prevent unintended negative stock
   if (targetItem && qty < 0 && (targetItem.qtyOnHand || 0) + qty < 0) {
-    errorMessage.value = language.isKhmer
-      ? `មិនអាចកាត់ស្តុកលើសពីចំនួនដែលមានទេ (នៅសល់: ${targetItem.qtyOnHand || 0})!`
-      : `Cannot reduce stock below 0 (Current on hand: ${targetItem.qtyOnHand || 0}).`;
+    await alertDialog({
+      title: language.isKhmer ? 'ស្តុកមិនគ្រប់គ្រាន់' : 'Insufficient stock',
+      message: language.isKhmer
+        ? `មិនអាចកាត់ស្តុកលើសពីចំនួនដែលមានទេ (នៅសល់: ${targetItem.qtyOnHand || 0})!`
+        : `Cannot reduce stock below 0 (Current on hand: ${targetItem.qtyOnHand || 0}).`,
+      variant: 'danger',
+      confirmText: language.isKhmer ? 'យល់ព្រម' : 'OK',
+    });
     return;
   }
 
   isSubmitting.value = true;
-  errorMessage.value = '';
 
   try {
     if (typeof tax.adjustStock === 'function') {
@@ -375,18 +374,25 @@ async function submit() {
     // Reset Form
     form.quantity = null;
     form.note = '';
-    success.value = true;
-
-    window.clearTimeout(submit.timer);
-    submit.timer = window.setTimeout(() => {
-      success.value = false;
-    }, 2500);
+    await alertDialog({
+      title: language.isKhmer ? 'បានកែសម្រួលស្តុក' : 'Stock adjustment posted',
+      message: language.isKhmer
+        ? 'បានកែសម្រួលស្តុកជោគជ័យ!'
+        : 'Stock adjusted successfully!',
+      variant: 'success',
+      confirmText: language.isKhmer ? 'យល់ព្រម' : 'OK',
+    });
   } catch (err) {
-    errorMessage.value = err?.message || (
-      language.isKhmer 
-        ? 'មានបញ្ហាបច្ចេកទេសក្នុងការកែតម្រូវស្តុក!' 
-        : 'Failed to record stock adjustment.'
-    );
+    await alertDialog({
+      title: language.isKhmer ? 'កែសម្រួលស្តុកបរាជ័យ' : 'Adjustment failed',
+      message: err?.message || (
+        language.isKhmer
+          ? 'មានបញ្ហាបច្ចេកទេសក្នុងការកែតម្រូវស្តុក!'
+          : 'Failed to record stock adjustment.'
+      ),
+      variant: 'danger',
+      confirmText: language.isKhmer ? 'យល់ព្រម' : 'OK',
+    });
   } finally {
     isSubmitting.value = false;
   }

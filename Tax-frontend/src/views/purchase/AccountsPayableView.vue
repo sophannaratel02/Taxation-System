@@ -306,6 +306,7 @@ import { computed, onMounted, ref } from 'vue';
 import { api } from '@/services/api';
 import { useLanguageStore } from '@/stores/language';
 import { useTaxStore } from '@/stores/tax';
+import { alertDialog } from '@/utils/dialog';
 
 const language = useLanguageStore();
 const tax = useTaxStore();
@@ -382,27 +383,51 @@ function openPayment(record) {
 async function pay() {
   if (!paymentRecord.value || paymentAmount.value <= 0) return;
 
+  const paidRecord = paymentRecord.value;
+  const paidAmount = Number(paymentAmount.value);
   savingPayment.value = true;
   error.value = '';
 
   try {
     await api.payAp({
-      orderId: paymentRecord.value.orderId || paymentRecord.value.id,
-      amount: paymentAmount.value,
+      orderId: paidRecord.orderId || paidRecord.id,
+      amount: paidAmount,
       paymentMethod: paymentMethod.value,
       reference: paymentReference.value,
     });
-
-    closePaymentModal();
-    await load();
-    await tax.initialize();
   } catch (requestError) {
-    error.value = requestError.message || (
-      language.isKhmer ? 'បរាជ័យក្នុងការកត់ត្រាការទូទាត់អ្នកផ្គត់ផ្គង់។' : 'Failed to record supplier payment.'
-    );
+    await alertDialog({
+      title: language.isKhmer ? 'ការទូទាត់បរាជ័យ' : 'Payment failed',
+      message: requestError.message || (
+        language.isKhmer ? 'បរាជ័យក្នុងការកត់ត្រាការទូទាត់អ្នកផ្គត់ផ្គង់។' : 'Failed to record supplier payment.'
+      ),
+      variant: 'danger',
+      confirmText: language.isKhmer ? 'យល់ព្រម' : 'OK',
+    });
+    return;
   } finally {
     savingPayment.value = false;
   }
+
+  closePaymentModal();
+  await load();
+
+  try {
+    await tax.initialize();
+  } catch (refreshError) {
+    error.value = language.isKhmer
+      ? `បានកត់ត្រាការទូទាត់ ប៉ុន្តែមិនអាចធ្វើបច្ចុប្បន្នភាពទិន្នន័យបានទេ៖ ${refreshError.message}`
+      : `Payment was recorded, but related data could not be refreshed: ${refreshError.message}`;
+  }
+
+  await alertDialog({
+    title: language.isKhmer ? 'បានកត់ត្រាការទូទាត់' : 'Payment recorded',
+    message: language.isKhmer
+      ? `បានទូទាត់ ${money(paidAmount)} ដុល្លារ ជូន ${paidRecord.vendor} ដោយជោគជ័យ។`
+      : `Successfully recorded a payment of $${money(paidAmount)} to ${paidRecord.vendor}.`,
+    variant: 'success',
+    confirmText: language.isKhmer ? 'យល់ព្រម' : 'OK',
+  });
 }
 
 const filteredRecords = computed(() => {

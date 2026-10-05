@@ -119,6 +119,7 @@
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue';
 import { api } from '@/services/api';
+import { confirmDialog } from '@/utils/dialog';
 
 const numberField = (key, label, unit = 'KHR') => ({ key, label, unit });
 const textField = (key, label) => ({ key, label, type: 'textarea', wide: true });
@@ -337,8 +338,16 @@ async function saveReturn(status = returnRecord.status) {
   }
 }
 
-function fileReturn() {
-  if (window.confirm('File this annual return? A filed return cannot be edited.')) saveReturn('filed');
+async function fileReturn() {
+  const confirmed = await confirmDialog({
+    title: 'File annual return',
+    message: 'File this annual return? A filed return cannot be edited.',
+    variant: 'warning',
+    confirmText: 'File return',
+  });
+
+  if (!confirmed) return;
+  await saveReturn('filed');
 }
 
 onMounted(loadReturns);

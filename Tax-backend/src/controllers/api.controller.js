@@ -8,12 +8,13 @@ const crypto = require('crypto');
 const { khqrData } = require('bakong-khqr');
 
 const { pool } = require('../db');
+const { resolveJwtSecret } = require('../config/runtime');
 const authRoutes = require('../routes/auth');
 const { authenticate: auth, requireAdmin: adminOnly } = require('../middleware/auth');
 const { uploadsDirectory, uploadSingleDocument } = require('../middleware/uploadDocument');
 
 const api = express.Router();
-const jwtSecret = process.env.JWT_SECRET || 'development-secret-change-me';
+const jwtSecret = resolveJwtSecret();
 const DEFAULT_VAT_RATE = 0.10;
 const PAYWAY_QR_LIFETIME_MINUTES = 15;
 const PAYWAY_QR_IMAGE_TEMPLATE = 'template3_color';

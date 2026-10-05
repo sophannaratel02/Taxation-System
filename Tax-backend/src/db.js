@@ -67,6 +67,14 @@ async function addUniqueIndexIfMissing(tableName, indexName, columnName) {
 }
 
 async function initializeDatabase() {
+  const isProd = process.env.NODE_ENV === 'production';
+  const allowAutoMigration = String(process.env.ALLOW_DB_AUTOMIGRATION || '').trim().toLowerCase();
+  const isMigrationAllowed = allowAutoMigration === 'true' || allowAutoMigration === '1' || !isProd;
+
+  if (isProd && !isMigrationAllowed) {
+    throw new Error('Production database auto-migration is disabled. Set ALLOW_DB_AUTOMIGRATION=true once to apply required schema updates.');
+  }
+
   // Ensure DB exists before running the schema on the pool
   await ensureDatabaseExists();
 
