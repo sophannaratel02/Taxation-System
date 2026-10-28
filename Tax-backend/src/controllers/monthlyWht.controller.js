@@ -1,6 +1,7 @@
 const express = require('express');
 const { pool } = require('../db');
 const { authenticate } = require('../middleware/auth');
+const { getTenantCompanyId } = require('../services/tenantContext');
 
 const router = express.Router();
 
@@ -72,9 +73,9 @@ async function fetchReturnItems(connection, returnId) {
             item.legacy_wht_record_id
        FROM wht_return_items AS item
        JOIN wht_tax_objects AS object ON object.object_code = item.tax_object_code
-      WHERE item.return_id = ?
+      WHERE item.company_id = ? AND item.return_id = ?
       ORDER BY item.created_at, item.id`,
-    [returnId]
+    [getTenantCompanyId(), returnId]
   );
   return items;
 }
@@ -84,7 +85,7 @@ router.use(authenticate);
 router.get('/monthly/wht-items', route(async (req, res) => {
   const returnId = parseReturnId(req.query.return_id);
   const [[periodRows], [objects]] = await Promise.all([
-    pool.execute('SELECT id FROM tax_periods WHERE id = ?', [returnId]),
+    pool.execute('SELECT id FROM tax_periods WHERE id = ? AND company_id = ?', [returnId, req.companyId]),
     pool.execute('SELECT object_code, description, category, default_tax_rate FROM wht_tax_objects ORDER BY category, object_code'),
   ]);
   if (!periodRows.length) throw new RequestError(404, 'Monthly tax return not found.');
@@ -94,9 +95,9 @@ router.get('/monthly/wht-items', route(async (req, res) => {
             item.legacy_wht_record_id
        FROM wht_return_items AS item
        JOIN wht_tax_objects AS object ON object.object_code = item.tax_object_code
-      WHERE item.return_id = ?
+      WHERE item.company_id = ? AND item.return_id = ?
       ORDER BY item.created_at, item.id`,
-    [returnId]
+    [req.companyId, returnId]
   );
   const cents = (field) => items.reduce((sum, item) => sum + Math.round(Number(item[field] || 0) * 100), 0);
   res.json({
@@ -115,11 +116,11 @@ router.post('/monthly/wht-items', route(async (req, res) => {
 
   try {
     await connection.beginTransaction();
-    const [periodRows] = await connection.execute('SELECT id, status FROM tax_periods WHERE id = ? FOR UPDATE', [returnId]);
+    const [periodRows] = await connection.execute('SELECT id, status FROM tax_periods WHERE id = ? AND company_id = ? FOR UPDATE', [returnId, req.companyId]);
     if (!periodRows.length) throw new RequestError(404, 'Monthly tax return not found.');
     if (periodRows[0].status !== 'draft') throw new RequestError(409, 'Only draft monthly tax returns can be edited.');
 
-    const [existingRows] = await connection.execute('SELECT id, tax_object_code, tax_rate FROM wht_return_items WHERE return_id = ? FOR UPDATE', [returnId]);
+    const [existingRows] = await connection.execute('SELECT id, tax_object_code, tax_rate FROM wht_return_items WHERE company_id = ? AND return_id = ? FOR UPDATE', [req.companyId, returnId]);
     const existingById = new Map(existingRows.map((item) => [item.id, item]));
     for (const item of items) {
       if (item.id && !existingById.has(item.id)) throw new RequestError(400, 'A WHT line does not belong to this monthly return.');
@@ -144,11 +145,11 @@ router.post('/monthly/wht-items', route(async (req, res) => {
       if (retainedIds.length) {
         const placeholders = retainedIds.map(() => '?').join(', ');
         await connection.execute(
-          `DELETE FROM wht_return_items WHERE return_id = ? AND id NOT IN (${placeholders})`,
-          [returnId, ...retainedIds]
+          `DELETE FROM wht_return_items WHERE company_id = ? AND return_id = ? AND id NOT IN (${placeholders})`,
+          [req.companyId, returnId, ...retainedIds]
         );
       } else {
-        await connection.execute('DELETE FROM wht_return_items WHERE return_id = ?', [returnId]);
+        await connection.execute('DELETE FROM wht_return_items WHERE company_id = ? AND return_id = ?', [req.companyId, returnId]);
       }
     }
 
@@ -159,8 +160,8 @@ router.post('/monthly/wht-items', route(async (req, res) => {
         await connection.execute(
           `UPDATE wht_return_items
               SET tax_object_code = ?, base_amount = ?, tax_rate = ?, withholding_tax = ?, remarks = ?, legacy_wht_record_id = NULL
-            WHERE id = ? AND return_id = ?`,
-          [item.taxObjectCode, item.baseAmount, taxRate, withholdingTax, item.remarks, item.id, returnId]
+            WHERE id = ? AND return_id = ? AND company_id = ?`,
+          [item.taxObjectCode, item.baseAmount, taxRate, withholdingTax, item.remarks, item.id, returnId, req.companyId]
         );
       } else {
         await connection.execute(

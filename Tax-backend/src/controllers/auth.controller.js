@@ -4,8 +4,15 @@ const jwt = require('jsonwebtoken');
 const { pool } = require('../db');
 const { resolveJwtSecret } = require('../config/runtime');
 const { transporter, mailFrom, mailConfigurationError, passwordResetEmail } = require('../config/mailer');
+const { loadAccessPolicy, passwordMeetsPolicy } = require('../services/accessPolicy');
 
 const jwtSecret = resolveJwtSecret();
+const RECOVERY_ACKNOWLEDGEMENT = 'If an account with that username exists, instructions have been sent to the registered email.';
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+function respondRecoveryAcknowledgement(res) {
+  return res.json({ ok: true, message: RECOVERY_ACKNOWLEDGEMENT });
+}
 
 function wasRecipientAccepted(message, email) {
   return (message.accepted || []).some((recipient) => {
@@ -16,67 +23,82 @@ function wasRecipientAccepted(message, email) {
 
 async function findValidReset(email, otp, connection = pool) {
   const identifier = String(email || '').trim().toLowerCase();
+  const lookupColumn = EMAIL_PATTERN.test(identifier) ? 'LOWER(email)' : 'LOWER(username)';
+  const [users] = await connection.query(
+    `SELECT id, company_id FROM users WHERE ${lookupColumn} = ? LIMIT 1 FOR UPDATE`,
+    [identifier]
+  );
+  if (!users.length) return null;
+
   const [rows] = await connection.query(
-    `SELECT pr.*, u.id AS account_id
-     FROM password_resets pr
-     JOIN users u ON u.id = pr.user_id
-     WHERE (LOWER(pr.email) = ? OR LOWER(u.username) = ?)
-       AND pr.is_used = 0 AND pr.expires_at > NOW()
-    ORDER BY pr.created_at DESC LIMIT 1
+    `SELECT * FROM password_resets
+    WHERE user_id = ? AND company_id = ? AND is_used = 0 AND expires_at > NOW()
+    ORDER BY created_at DESC LIMIT 1
     FOR UPDATE`,
-    [identifier, identifier]
+    [users[0].id, users[0].company_id]
   );
 
   if (!rows[0] || !(await bcrypt.compare(String(otp || ''), rows[0].otp_hash))) return null;
   return rows[0];
 }
 
-async function forgotPassword(req, res) {
+async function forgotPassword(req, res, next, dependencies = {}) {
   let connection;
   let transactionStarted = false;
+  let sendingEmail = false;
+  const database = dependencies.database || pool;
+  const emailTransporter = dependencies.transporter || transporter;
+  const sender = dependencies.sender || mailFrom;
   try {
     const emailOrUsername = String(req.body?.emailOrUsername || req.body?.email || '').trim();
-    if (!emailOrUsername) {
-      return res.status(400).json({ message: 'Enter your account username or recovery email.' });
+    if (!emailOrUsername || emailOrUsername.length > 254) {
+      return res.status(400).json({ message: 'Enter a valid account username or recovery email.' });
     }
 
-    if (!transporter) {
-      console.error(mailConfigurationError || 'Password reset email transport is not configured.');
+    if (!emailTransporter) {
+      console.error(dependencies.mailConfigurationError || mailConfigurationError || 'Password reset email transport is not configured.');
       return res.status(503).json({ message: 'Password reset email is not configured correctly. Check the SMTP settings in Tax-backend/.env and restart the backend.' });
     }
 
-    const [users] = await pool.query(
-      'SELECT id, email FROM users WHERE LOWER(username) = LOWER(?) OR LOWER(email) = LOWER(?) LIMIT 1',
-      [emailOrUsername, emailOrUsername]
+    connection = await database.getConnection();
+    await connection.beginTransaction();
+    transactionStarted = true;
+    const lookupColumn = EMAIL_PATTERN.test(emailOrUsername.toLowerCase())
+      ? 'LOWER(email)'
+      : 'LOWER(username)';
+    const [users] = await connection.query(
+      `SELECT id, email, company_id FROM users
+       WHERE ${lookupColumn} = LOWER(?)
+       LIMIT 1 FOR UPDATE`,
+      [emailOrUsername]
     );
     const user = users[0];
-    if (!user) {
-      return res.status(404).json({ message: 'No account was found. Check the username or recovery email and try again.' });
-    }
-    if (!user.email) {
-      return res.status(400).json({ message: 'This account has no recovery email. Ask an administrator to add one, then try again.' });
+    if (!user || !user.email) {
+      await connection.commit();
+      transactionStarted = false;
+      return respondRecoveryAcknowledgement(res);
     }
 
     const recoveryEmail = String(user.email).trim();
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(recoveryEmail)) {
-      return res.status(400).json({ message: 'This account has an invalid recovery email. Ask an administrator to update it.' });
+      await connection.commit();
+      transactionStarted = false;
+      return respondRecoveryAcknowledgement(res);
     }
 
     const otp = String(crypto.randomInt(100000, 1000000));
     const otpHash = await bcrypt.hash(otp, 10);
 
-    connection = await pool.getConnection();
-    await connection.beginTransaction();
-    transactionStarted = true;
-    await connection.query('UPDATE password_resets SET is_used = 1 WHERE user_id = ? AND is_used = 0', [user.id]);
+    await connection.query('UPDATE password_resets SET is_used = 1 WHERE user_id = ? AND company_id = ? AND is_used = 0', [user.id, user.company_id]);
     await connection.query(
-      `INSERT INTO password_resets (user_id, email, otp_hash, expires_at)
-       VALUES (?, ?, ?, DATE_ADD(NOW(), INTERVAL 10 MINUTE))`,
-      [user.id, recoveryEmail.toLowerCase(), otpHash]
+      `INSERT INTO password_resets (company_id, user_id, email, otp_hash, expires_at)
+       VALUES (?, ?, ?, ?, DATE_ADD(NOW(), INTERVAL 10 MINUTE))`,
+      [user.company_id, user.id, recoveryEmail.toLowerCase(), otpHash]
     );
 
-    const message = await transporter.sendMail({
-      from: { name: 'Tax System', address: mailFrom },
+    sendingEmail = true;
+    const message = await emailTransporter.sendMail({
+      from: { name: 'Tax System', address: sender },
       to: recoveryEmail,
       subject: 'Your Tax System password reset code',
       text: `Your password reset code is ${otp}. It expires in 10 minutes. Do not share this code.`,
@@ -86,20 +108,24 @@ async function forgotPassword(req, res) {
       throw new Error('SMTP server did not accept the recovery email recipient.');
     }
 
+    sendingEmail = false;
     await connection.commit();
     transactionStarted = false;
     console.log('Password reset email accepted by SMTP.');
-    return res.json({ ok: true, message: 'Verification code sent to the recovery email.' });
+    return respondRecoveryAcknowledgement(res);
   } catch (error) {
-    if (connection && transactionStarted) await connection.rollback().catch(() => {});
-    console.error('Password reset email failed:', error.message);
-    return res.status(503).json({ message: 'The verification email could not be sent. Check the SMTP host, port, sender, and app password, then try again.' });
+    if (connection && transactionStarted) await connection.rollback();
+    if (sendingEmail) {
+      console.error('Password reset email failed:', error.message);
+      return res.status(503).json({ message: 'The verification email could not be sent. Check the SMTP host, port, sender, and app password, then try again.' });
+    }
+    return next(error);
   } finally {
     connection?.release();
   }
 }
 
-async function verifyOtp(req, res) {
+async function verifyOtp(req, res, _next, database = pool) {
   let connection;
   let transactionStarted = false;
   try {
@@ -109,7 +135,7 @@ async function verifyOtp(req, res) {
       return res.status(400).json({ message: 'Enter the email or username and the 6-digit verification code.' });
     }
 
-    connection = await pool.getConnection();
+    connection = await database.getConnection();
     await connection.beginTransaction();
     transactionStarted = true;
     const reset = await findValidReset(email, otp, connection);
@@ -136,13 +162,14 @@ async function verifyOtp(req, res) {
   }
 }
 
-async function resetPassword(req, res) {
+async function resetPassword(req, res, _next, database = pool, policyLoader = loadAccessPolicy) {
   let connection;
   let transactionStarted = false;
   try {
     const { email, otp, newPassword, resetToken } = req.body || {};
-    if (!newPassword || String(newPassword).length < 6) {
-      return res.status(400).json({ message: 'Password must be at least 6 characters.' });
+    const accessPolicy = await policyLoader(database);
+    if (!passwordMeetsPolicy(newPassword, accessPolicy)) {
+      return res.status(400).json({ message: `Password must be at least ${accessPolicy.passwordMinLength} characters.` });
     }
     if (!String(email || '').trim() || !/^\d{6}$/.test(String(otp || '').trim())) {
       return res.status(400).json({ message: 'Enter the email or username and the 6-digit verification code.' });
@@ -158,7 +185,7 @@ async function resetPassword(req, res) {
       return res.status(400).json({ message: 'Invalid reset authorization.' });
     }
 
-    connection = await pool.getConnection();
+    connection = await database.getConnection();
     await connection.beginTransaction();
     transactionStarted = true;
     const reset = await findValidReset(email, otp, connection);
@@ -170,7 +197,7 @@ async function resetPassword(req, res) {
 
     const passwordHash = await bcrypt.hash(String(newPassword), 10);
     await connection.query('UPDATE users SET password_hash = ? WHERE id = ?', [passwordHash, reset.user_id]);
-    await connection.query('UPDATE password_resets SET is_used = 1 WHERE id = ?', [reset.id]);
+    await connection.query('UPDATE password_resets SET is_used = 1 WHERE user_id = ? AND company_id = ?', [reset.user_id, reset.company_id]);
     await connection.commit();
     transactionStarted = false;
     console.log('Password reset completed.');
@@ -184,4 +211,10 @@ async function resetPassword(req, res) {
   }
 }
 
-module.exports = { forgotPassword, verifyOtp, resetPassword };
+module.exports = {
+  RECOVERY_ACKNOWLEDGEMENT,
+  forgotPassword,
+  respondRecoveryAcknowledgement,
+  resetPassword,
+  verifyOtp,
+};

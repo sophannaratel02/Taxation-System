@@ -2,7 +2,7 @@
   <section class="container-fluid p-4 page-canvas">
     <!-- Header -->
     <div class="mb-4">
-      <div class="eyebrow mb-2">Reports & analytics</div>
+      <div class="eyebrow mb-2">{{ text('របាយការណ៍ និងការវិភាគ', 'Reports & analytics') }}</div>
       <h1 class="h3 fw-bold mb-1">{{ report.title }}</h1>
       <p class="text-muted mb-0">{{ report.description }}</p>
     </div>
@@ -38,7 +38,7 @@
             </tr>
             <tr v-if="!report.rows.length">
               <td :colspan="report.headings.length" class="text-center text-muted py-4">
-                No records found.
+                {{ text('រកមិនឃើញទិន្នន័យទេ។', 'No records found.') }}
               </td>
             </tr>
           </tbody>
@@ -52,11 +52,19 @@
 import { computed } from 'vue';
 import { useRoute } from 'vue-router';
 import { useTaxStore } from '@/stores/tax';
+import { useLanguageStore } from '@/stores/language';
 
 const route = useRoute();
 const tax = useTaxStore();
+const language = useLanguageStore();
+const text = (khmer, english) => language.isKhmer ? khmer : english;
 
-const formatCurrency = (val) => `$${Number(val || 0).toFixed(2)}`;
+const toNumber = (value, fallback = 0) => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+};
+
+const formatCurrency = (val) => `$${toNumber(val).toFixed(2)}`;
 
 const report = computed(() => {
   const path = route.path;
@@ -64,9 +72,9 @@ const report = computed(() => {
   // 1. Customer Report
   if (path.includes('by-customer')) {
     return {
-      title: 'Sales by Customer',
-      description: 'Sales, VAT and balances by customer.',
-      headings: ['Customer', 'Invoices', 'Net sale', 'VAT', 'Grand total'],
+      title: text('ការលក់តាមអតិថិជន', 'Sales by Customer'),
+      description: text('ការលក់ អាករ VAT និងសមតុល្យតាមអតិថិជន។', 'Sales, VAT and balances by customer.'),
+      headings: [text('អតិថិជន', 'Customer'), text('វិក្កយបត្រ', 'Invoices'), text('ការលក់សុទ្ធ', 'Net sale'), 'VAT', text('សរុបរួម', 'Grand total')],
       rows: (tax.customers || []).map((customer) => {
         const invoices = (tax.invoices || []).filter((inv) => inv.customer === customer.name);
         const netSale = invoices.reduce((s, i) => s + (i.netSale || 0), 0);
@@ -81,9 +89,9 @@ const report = computed(() => {
   if (path.includes('by-category')) {
     const categories = [...new Set((tax.items || []).map((item) => item.category))];
     return {
-      title: 'Sales by Category',
-      description: 'Net sales allocated to each item category.',
-      headings: ['Category', 'Items', 'Units sold', 'Net sale', 'Margin'],
+      title: text('ការលក់តាមប្រភេទ', 'Sales by Category'),
+      description: text('ការលក់សុទ្ធបែងចែកតាមប្រភេទទំនិញនីមួយៗ។', 'Net sales allocated to each item category.'),
+      headings: [text('ប្រភេទ', 'Category'), text('ទំនិញ', 'Items'), text('ចំនួនដែលបានលក់', 'Units sold'), text('ការលក់សុទ្ធ', 'Net sale'), text('ប្រាក់ចំណេញ', 'Margin')],
       rows: categories.map((category) => [
         category,
         (tax.items || []).filter((item) => item.category === category).length,
@@ -97,9 +105,9 @@ const report = computed(() => {
   // 3. Item Report
   if (path.includes('by-item') || path.includes('inventory-detail')) {
     return {
-      title: 'Sales by Item',
-      description: 'Best and slow-moving item performance.',
-      headings: ['Item', 'Category', 'On hand', 'Retail price', 'Stock value'],
+      title: text('ការលក់តាមទំនិញ', 'Sales by Item'),
+      description: text('ប្រសិទ្ធភាពទំនិញដែលលក់ដាច់ និងលក់យឺត។', 'Best and slow-moving item performance.'),
+      headings: [text('ទំនិញ', 'Item'), text('ប្រភេទ', 'Category'), text('នៅសល់ក្នុងស្តុក', 'On hand'), text('តម្លៃលក់រាយ', 'Retail price'), text('តម្លៃស្តុក', 'Stock value')],
       rows: (tax.items || []).map((item) => [
         item.nameEn,
         item.category,
@@ -116,14 +124,19 @@ const report = computed(() => {
     const methods = ['cash', 'bank', 'customer_account'];
 
     return {
-      title: 'Sales by Payment Method',
-      description: 'Tender mix and payment totals.',
-      headings: ['Payment method', 'Invoices', 'Grand total', 'Share'],
+      title: text('ការលក់តាមវិធីទូទាត់', 'Sales by Payment Method'),
+      description: text('សមាសភាពវិធីទូទាត់ និងចំនួនទឹកប្រាក់ទូទាត់សរុប។', 'Tender mix and payment totals.'),
+      headings: [text('វិធីទូទាត់', 'Payment method'), text('វិក្កយបត្រ', 'Invoices'), text('សរុបរួម', 'Grand total'), text('ភាគរយ', 'Share')],
       rows: methods.map((method) => {
         const list = (tax.invoices || []).filter((inv) => inv.paymentMethod === method);
         const methodTotal = list.reduce((sum, inv) => sum + (inv.total || 0), 0);
         const share = totalSales > 0 ? ((methodTotal / totalSales) * 100).toFixed(1) : '0.0';
-        return [method.replaceAll('_', ' '), list.length, formatCurrency(methodTotal), `${share}%`];
+        const labels = {
+          cash: text('សាច់ប្រាក់', 'Cash'),
+          bank: text('ធនាគារ', 'Bank'),
+          customer_account: text('គណនីអតិថិជន', 'Customer account')
+        };
+        return [labels[method] || method.replaceAll('_', ' '), list.length, formatCurrency(methodTotal), `${share}%`];
       })
     };
   }
@@ -131,14 +144,14 @@ const report = computed(() => {
   // 5. Aging Report
   if (path.includes('aging')) {
     return {
-      title: path.includes('/ar') ? 'Accounts Receivable Aging' : 'Accounts Payable Aging',
-      description: 'Open balances by aging bucket for collection and payment planning.',
-      headings: ['Bucket', 'Documents', 'Balance', 'Action'],
+      title: path.includes('/ar') ? text('តារាងអាយុបំណុលត្រូវទារ', 'Accounts Receivable Aging') : text('តារាងអាយុបំណុលត្រូវសង', 'Accounts Payable Aging'),
+      description: text('សមតុល្យមិនទាន់ទូទាត់តាមរយៈពេលសម្រាប់រៀបចំការទារ និងទូទាត់។', 'Open balances by aging bucket for collection and payment planning.'),
+      headings: [text('រយៈពេល', 'Bucket'), text('ឯកសារ', 'Documents'), text('សមតុល្យ', 'Balance'), text('សកម្មភាព', 'Action')],
       rows: [
-        ['0-30 days', '4', '$1,240.00', 'Monitor'],
-        ['31-60 days', '2', '$420.00', 'Follow up'],
-        ['61-90 days', '1', '$180.00', 'Escalate'],
-        ['>90 days', '0', '$0.00', 'Clear']
+        [`0-30 ${text('ថ្ងៃ', 'days')}`, '4', '$1,240.00', text('តាមដាន', 'Monitor')],
+        [`31-60 ${text('ថ្ងៃ', 'days')}`, '2', '$420.00', text('តាមដានបន្ត', 'Follow up')],
+        [`61-90 ${text('ថ្ងៃ', 'days')}`, '1', '$180.00', text('បញ្ជូនបន្ត', 'Escalate')],
+        [`>90 ${text('ថ្ងៃ', 'days')}`, '0', '$0.00', text('បិទ', 'Clear')]
       ]
     };
   }
@@ -146,38 +159,38 @@ const report = computed(() => {
   // 6. Transfers Report
   if (path.includes('transfer')) {
     return {
-      title: 'Inventory Transfer Report',
-      description: 'Branch and warehouse stock movements.',
-      headings: ['Transfer', 'From', 'To', 'Items', 'Status'],
-      rows: [['TR-0001', 'Head Quarter', 'Downtown Shop', '24', 'Completed']]
+      title: text('របាយការណ៍ផ្ទេរសារពើភណ្ឌ', 'Inventory Transfer Report'),
+      description: text('ចលនាស្តុករវាងសាខា និងឃ្លាំង។', 'Branch and warehouse stock movements.'),
+      headings: [text('ការផ្ទេរ', 'Transfer'), text('ពី', 'From'), text('ទៅ', 'To'), text('ទំនិញ', 'Items'), text('ស្ថានភាព', 'Status')],
+      rows: [['TR-0001', text('ទីស្នាក់ការកណ្តាល', 'Head Quarter'), text('ហាងកណ្តាលក្រុង', 'Downtown Shop'), '24', text('បានបញ្ចប់', 'Completed')]]
     };
   }
 
   // 7. Purchase / Vendor Default
   const purchaseTitle = path.includes('best-selling')
-    ? 'Best Selling Items'
+    ? text('ទំនិញលក់ដាច់បំផុត', 'Best Selling Items')
     : path.includes('multi-vendor')
-    ? 'Items Supplied by Multiple Vendors'
-    : 'Purchase by Vendor';
+    ? text('ទំនិញដែលផ្គត់ផ្គង់ដោយអ្នកផ្គត់ផ្គង់ច្រើន', 'Items Supplied by Multiple Vendors')
+    : text('ការទិញតាមអ្នកផ្គត់ផ្គង់', 'Purchase by Vendor');
 
   return {
     title: purchaseTitle,
-    description: 'Procurement performance and supplier allocation.',
-    headings: ['Vendor / Item', 'Orders', 'Quantity', 'Amount', 'Status'],
+    description: text('ប្រសិទ្ធភាពការទិញ និងការបែងចែកតាមអ្នកផ្គត់ផ្គង់។', 'Procurement performance and supplier allocation.'),
+    headings: [text('អ្នកផ្គត់ផ្គង់ / ទំនិញ', 'Vendor / Item'), text('បញ្ជាទិញ', 'Orders'), text('បរិមាណ', 'Quantity'), text('ចំនួនទឹកប្រាក់', 'Amount'), text('ស្ថានភាព', 'Status')],
     rows: (tax.vendors || []).map((vendor) => [
       vendor.name,
       '2',
       '-',
       formatCurrency(vendor.balance),
-      'Tracked'
+      text('បានតាមដាន', 'Tracked')
     ])
   };
 });
 
 const stats = computed(() => [
-  { label: 'Records', value: report.value.rows.length },
-  { label: 'Net sales', value: formatCurrency(tax.todaySales) },
-  { label: 'Inventory value', value: formatCurrency(tax.inventoryValue) },
-  { label: 'As of', value: 'Today' }
+  { label: text('កំណត់ត្រា', 'Records'), value: report.value.rows.length },
+  { label: text('ការលក់សុទ្ធ', 'Net sales'), value: formatCurrency(tax.todaySales) },
+  { label: text('តម្លៃសារពើភណ្ឌ', 'Inventory value'), value: formatCurrency(tax.inventoryValue) },
+  { label: text('គិតត្រឹម', 'As of'), value: text('ថ្ងៃនេះ', 'Today') }
 ]);
 </script>

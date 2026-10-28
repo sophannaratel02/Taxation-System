@@ -9,7 +9,7 @@
             <i class="bi bi-pie-chart-fill"></i>
             <span>{{ language.t('reports') }}</span>
             <span class="text-muted">·</span>
-            <span>ERP Valuation Engine</span>
+            <span>{{ language.isKhmer ? 'ប្រព័ន្ធវាយតម្លៃ ERP' : 'ERP Valuation Engine' }}</span>
           </div>
           <h1 class="h3 fw-bold text-dark mb-1 tracking-tight">
             {{ language.isKhmer ? 'របាយការណ៍ស្តុកសង្ខេប' : 'Inventory Valuation & Summary Report' }}
@@ -79,7 +79,7 @@
             <input
               v-model.trim="search"
               class="form-control border-start-0 shadow-none"
-              :placeholder="language.isKhmer ? 'ស្វែងរកប្រភេទ...' : 'Filter categories...'"
+              :placeholder="language.isKhmer ? 'ស្វែងរកប្រភេទ ឬទំនិញ...' : 'Search categories or items...'"
             />
             <button v-if="search" class="btn btn-outline-secondary border-start-0 border-end" type="button" @click="search = ''">
               <i class="bi bi-x"></i>
@@ -115,8 +115,13 @@
                   </div>
                   <div>
                     <span class="fw-bold text-dark d-block">{{ row.category }}</span>
+                    <small v-if="search && row.matchingItems.length" class="text-muted d-block text-truncate" :title="row.matchingItems.map((item) => item.nameEn).join(', ')">
+                      {{ language.isKhmer ? 'ទំនិញត្រូវគ្នា៖ ' : 'Matching items: ' }}{{ row.matchingItems.map((item) => item.nameEn).join(', ') }}
+                    </small>
                     <small class="text-muted">
-                      {{ (row.retail - row.value) > 0 ? 'Margin: +$' + formatCurrency(row.retail - row.value) : 'Standard' }}
+                      {{ (row.retail - row.value) > 0
+                        ? (language.isKhmer ? 'ប្រាក់ចំណេញ៖ +$' : 'Margin: +$') + formatCurrency(row.retail - row.value)
+                        : (language.isKhmer ? 'ស្តង់ដារ' : 'Standard') }}
                     </small>
                   </div>
                 </div>
@@ -199,20 +204,95 @@
         </table>
       </div>
     </div>
+
+    <div v-if="valuationError" class="alert alert-danger" role="alert">{{ valuationError }}</div>
+
+    <div class="card border-0 shadow-sm rounded-4 overflow-hidden mt-4">
+      <div class="card-header bg-white py-3 px-4 border-bottom">
+        <strong class="fs-6 text-dark">{{ language.isKhmer ? 'ថ្លៃដើមលក់ និងប្រាក់ចំណេញសរុប' : 'Sales, COGS & Gross Profit by Item' }}</strong>
+      </div>
+      <div class="table-responsive">
+        <table class="table align-middle table-hover mb-0 modern-table">
+          <thead class="table-light">
+            <tr>
+              <th class="ps-4">{{ language.t('item') }}</th>
+              <th class="text-end">{{ language.isKhmer ? 'បរិមាណស្តុក' : 'Qty on Hand' }}</th>
+              <th class="text-end">{{ language.isKhmer ? 'ថ្លៃដើមមធ្យម' : 'Moving Avg Cost' }}</th>
+              <th class="text-end">{{ language.t('inventoryValue') }}</th>
+              <th class="text-end">{{ language.isKhmer ? 'ចំនួនលក់' : 'Qty Sold' }}</th>
+              <th class="text-end">COGS</th>
+              <th class="text-end">{{ language.isKhmer ? 'ប្រាក់ចំណូលលក់' : 'Sales' }}</th>
+              <th class="text-end pe-4">{{ language.isKhmer ? 'ប្រាក់ចំណេញដុល' : 'Gross Profit' }}</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="row in valuationRows" :key="row.item_id">
+              <td class="ps-4 fw-semibold">{{ row.item_name }}</td>
+              <td class="text-end">{{ Number(row.qty_on_hand).toLocaleString() }}</td>
+              <td class="text-end font-monospace">${{ formatCurrency(row.moving_avg_cost) }}</td>
+              <td class="text-end font-monospace">${{ formatCurrency(row.total_stock_value) }}</td>
+              <td class="text-end">{{ Number(row.total_qty_sold).toLocaleString() }}</td>
+              <td class="text-end font-monospace">${{ formatCurrency(row.cogs_amount) }}</td>
+              <td class="text-end font-monospace">${{ formatCurrency(row.sales_amount) }}</td>
+              <td class="text-end pe-4 fw-bold" :class="Number(row.gross_profit) < 0 ? 'text-danger' : 'text-success'">
+                ${{ formatCurrency(row.gross_profit) }}
+              </td>
+            </tr>
+            <tr v-if="!valuationRows.length && !valuationError">
+              <td colspan="8" class="text-center text-muted py-4">{{ language.t('noRecords') }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
   </section>
 </template>
 
 <script setup>
-import { computed, ref } from 'vue';
+import { computed, onMounted, ref } from 'vue';
+import { api } from '@/services/api';
 import { useTaxStore } from '@/stores/tax';
 import { useLanguageStore } from '@/stores/language';
+import { matchesSearch } from '@/utils/search';
 
 const tax = useTaxStore();
 const language = useLanguageStore();
 
 const search = ref('');
-const formatCurrency = (val) => Number(val || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const valuationRows = ref([]);
+const valuationError = ref('');
+const toNumber = (value, fallback = 0) => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+};
+const normalizeValuationRows = (rows = []) => {
+  if (!Array.isArray(rows)) return [];
+  return rows.map((row = {}) => ({
+    ...row,
+    item_id: row.item_id,
+    qty_on_hand: toNumber(row.qty_on_hand),
+    moving_avg_cost: toNumber(row.moving_avg_cost),
+    total_stock_value: toNumber(row.total_stock_value),
+    total_qty_sold: toNumber(row.total_qty_sold),
+    cogs_amount: toNumber(row.cogs_amount),
+    sales_amount: toNumber(row.sales_amount),
+    gross_profit: toNumber(row.gross_profit),
+  }));
+};
+const formatCurrency = (val) => toNumber(val).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const exchangeRate = computed(() => Number(tax.settings?.exchangeRate) || 4000);
+const valuationByItem = computed(() => new Map(valuationRows.value.map((row) => [Number(row.item_id), row])));
+const inventoryValue = computed(() => valuationRows.value.reduce((total, row) => total + toNumber(row.total_stock_value), 0));
+
+onMounted(async () => {
+  try {
+    const result = await api.inventoryValuation(tax.settings?.branch || '');
+    valuationRows.value = normalizeValuationRows(Array.isArray(result) ? result : []);
+  } catch (error) {
+    valuationError.value = error?.message || (language.isKhmer ? 'មិនអាចផ្ទុករបាយការណ៍តម្លៃស្តុកបានទេ។' : 'Could not load inventory valuation.');
+  }
+});
 
 const rows = computed(() => {
   const items = tax.items || [];
@@ -223,19 +303,21 @@ const rows = computed(() => {
 
   for (const item of items) {
     const category = item.category || uncategorizedLabel;
-    const qty = Math.max(0, Number(item.qtyOnHand || 0));
-    const cost = Math.max(0, Number(item.averageCost || item.purchaseCost || 0));
+    const valuation = valuationByItem.value.get(Number(item.id));
+    const qty = Number(valuation?.qty_on_hand ?? item.qtyOnHand ?? 0);
+    const cost = Number(valuation?.moving_avg_cost ?? item.averageCost ?? item.purchaseCost ?? 0);
     const retail = Math.max(0, Number(item.retailPrice || item.price || 0));
 
-    const lineCostValue = qty * cost;
-    const lineRetailValue = qty * retail;
+    const lineCostValue = Number(valuation?.total_stock_value ?? Math.max(0, qty) * cost);
+    const lineRetailValue = Math.max(0, qty) * retail;
 
-    totalCalculatedValue += lineCostValue;
+    totalCalculatedValue += Math.max(0, lineCostValue);
 
     if (!groupMap.has(category)) {
       groupMap.set(category, {
         category,
         items: 0,
+        searchableItems: [],
         qty: 0,
         value: 0,
         retail: 0
@@ -244,12 +326,13 @@ const rows = computed(() => {
 
     const group = groupMap.get(category);
     group.items += 1;
+    group.searchableItems.push(item);
     group.qty += qty;
     group.value += lineCostValue;
     group.retail += lineRetailValue;
   }
 
-  const denominator = totalCalculatedValue || tax.inventoryValue || 0;
+  const denominator = totalCalculatedValue || inventoryValue.value || 0;
 
   return Array.from(groupMap.values()).map((group) => {
     const avgCost = group.qty > 0 ? group.value / group.qty : 0;
@@ -266,9 +349,13 @@ const rows = computed(() => {
 });
 
 const filteredRows = computed(() => {
-  if (!search.value) return rows.value;
-  const q = search.value.toLowerCase();
-  return rows.value.filter((r) => r.category.toLowerCase().includes(q));
+  if (!search.value.trim()) return rows.value;
+  return rows.value
+    .filter((row) => matchesSearch(search.value, row.category, row.searchableItems))
+    .map((row) => ({
+      ...row,
+      matchingItems: row.searchableItems.filter((item) => matchesSearch(search.value, item)),
+    }));
 });
 
 const totalItemsCount = computed(() => filteredRows.value.reduce((acc, r) => acc + r.items, 0));
@@ -279,8 +366,8 @@ const totalRetailValue = computed(() => filteredRows.value.reduce((acc, r) => ac
 const stats = computed(() => [
   {
     label: language.t('inventoryValue'),
-    value: `$${formatCurrency(tax.inventoryValue)}`,
-    subLabel: `${Math.round((tax.inventoryValue || 0) * exchangeRate.value).toLocaleString()} ៛`,
+    value: `$${formatCurrency(inventoryValue.value)}`,
+    subLabel: `${Math.round(inventoryValue.value * exchangeRate.value).toLocaleString()} ៛`,
     extra: 'Asset Cost',
     icon: 'bi bi-box-seam',
     bg: 'bg-primary-subtle',

@@ -9,7 +9,7 @@
             <i class="bi bi-truck"></i>
             <span>{{ language.t('reports') }}</span>
             <span class="text-muted">·</span>
-            <span>Vendor Analytics</span>
+            <span>{{ language.isKhmer ? 'វិភាគអ្នកផ្គត់ផ្គង់' : 'Vendor Analytics' }}</span>
           </div>
           <h1 class="h3 fw-bold text-dark mb-1 tracking-tight">
             {{ language.isKhmer ? 'របាយការណ៍លក់តាមអ្នកផ្គត់ផ្គង់' : language.t('salesByVendor') }}
@@ -82,7 +82,7 @@
             <input
               v-model.trim="search"
               class="form-control border-start-0 shadow-none"
-              :placeholder="language.isKhmer ? 'ស្វែងរកអ្នកផ្គត់ផ្គង់...' : 'Filter suppliers...'"
+              :placeholder="language.isKhmer ? 'ស្វែងរកអ្នកផ្គត់ផ្គង់ តម្លៃ ឬបរិមាណ...' : 'Search vendors, sales, units or margin...'"
             />
             <button v-if="search" class="btn btn-outline-secondary border-start-0 border-end" type="button" @click="search = ''">
               <i class="bi bi-x"></i>
@@ -200,46 +200,53 @@
 import { computed, ref } from 'vue';
 import { useLanguageStore } from '@/stores/language';
 import { useTaxStore } from '@/stores/tax';
+import { matchesSearch } from '@/utils/search';
 
 const language = useLanguageStore();
 const tax = useTaxStore();
 
 const search = ref('');
 const exchangeRate = computed(() => Number(tax.settings?.exchangeRate) || 4000);
+const toNumber = (value, fallback = 0) => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+};
+const normalizeVendorList = (rows = []) => {
+  if (!Array.isArray(rows)) return [];
+  return rows.map((row = {}) => ({
+    ...row,
+    vendor: String(row.vendor || 'Unknown vendor'),
+    units: toNumber(row.units),
+    sales: toNumber(row.sales),
+    margin: toNumber(row.margin),
+  }));
+};
 
 const formatMoney = (val) =>
-  Number(val || 0).toLocaleString(undefined, {
+  toNumber(val).toLocaleString(undefined, {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2
   });
 
-// Data Source
-const vendorList = ref([
-  { vendor: 'Cambodia Beverage Co.', units: 420, sales: 3240.0, margin: 24.5 },
-  { vendor: 'Local Foods Supply', units: 180, sales: 1120.0, margin: 18.2 },
-  { vendor: 'Phnom Penh Dairy Distribution', units: 95, sales: 580.0, margin: 21.0 },
-  { vendor: 'Angkor Bakery & Snacks', units: 140, sales: 420.0, margin: 28.4 }
-]);
+const vendorList = ref([]);
 
 const filteredRows = computed(() => {
-  if (!search.value) return vendorList.value;
-  const q = search.value.toLowerCase();
-  return vendorList.value.filter((item) =>
-    item.vendor.toLowerCase().includes(q)
-  );
+  const safeList = normalizeVendorList(vendorList.value);
+  if (!search.value.trim()) return safeList;
+  return safeList.filter((item) => matchesSearch(search.value, item));
 });
 
 const totalSales = computed(() =>
-  filteredRows.value.reduce((sum, item) => sum + item.sales, 0)
+  filteredRows.value.reduce((sum, item) => sum + toNumber(item.sales), 0)
 );
 
 const totalUnits = computed(() =>
-  filteredRows.value.reduce((sum, item) => sum + item.units, 0)
+  filteredRows.value.reduce((sum, item) => sum + toNumber(item.units), 0)
 );
 
 const avgMargin = computed(() => {
   if (!filteredRows.value.length) return 0;
-  const sum = filteredRows.value.reduce((acc, item) => acc + item.margin, 0);
+  const sum = filteredRows.value.reduce((acc, item) => acc + toNumber(item.margin), 0);
   return sum / filteredRows.value.length;
 });
 
@@ -274,7 +281,7 @@ const stats = computed(() => [
   {
     label: language.t('grossProfit'),
     value: `$${formatMoney(totalSales.value * (avgMargin.value / 100))}`,
-    subLabel: `Avg Margin: ${avgMargin.value.toFixed(1)}%`,
+    subLabel: `${language.isKhmer ? 'ប្រាក់ចំណេញមធ្យម៖' : 'Avg Margin:'} ${avgMargin.value.toFixed(1)}%`,
     extra: 'Net Margin',
     icon: 'bi bi-graph-up-arrow',
     bg: 'bg-success-subtle',

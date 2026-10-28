@@ -29,6 +29,24 @@
       </nav>
     </header>
 
+    <section v-if="setupNeeded" class="alert alert-info d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-3" aria-labelledby="workspace-setup-title">
+      <div>
+        <h2 id="workspace-setup-title" class="h6 mb-1">{{ language.isKhmer ? 'បញ្ចប់ការរៀបចំក្រុមហ៊ុនរបស់អ្នក' : 'Set up your new workspace' }}</h2>
+        <p class="mb-0">{{ language.isKhmer ? 'បន្ថែមអាសយដ្ឋាន ព័ត៌មានពន្ធ និងចំណូលចិត្តក្រុមហ៊ុន មុនពេលចាប់ផ្តើម។' : 'Add your company address, tax ID/VAT number, and profile details. Your sales, inventory, and invoices start empty.' }}</p>
+        <small v-if="setupError" class="d-block mt-1">{{ language.isKhmer ? 'មិនអាចផ្ទុកប្រវត្តិរូបក្រុមហ៊ុនបានទេ។' : `Company profile status could not be checked: ${setupError}` }}</small>
+      </div>
+      <router-link to="/company/profile" class="btn btn-primary flex-shrink-0">
+        {{ language.isKhmer ? 'រៀបចំក្រុមហ៊ុន' : 'Complete company profile' }}
+      </router-link>
+    </section>
+
+    <div v-if="tax.error" class="alert alert-warning d-flex align-items-center justify-content-between gap-3" role="alert">
+      <span>{{ language.isKhmer ? 'មិនអាចផ្ទុកទិន្នន័យមួយចំនួនបានទេ។' : `Some data could not be loaded: ${tax.error}` }}</span>
+      <button class="btn btn-sm btn-outline-dark flex-shrink-0" :disabled="tax.loading" @click="tax.initialize()">
+        {{ tax.loading ? (language.isKhmer ? 'កំពុងផ្ទុក...' : 'Loading...') : (language.isKhmer ? 'ព្យាយាមម្តងទៀត' : 'Retry') }}
+      </button>
+    </div>
+
     <!-- Sales Hero Overview Card -->
     <section class="sales-overview" :aria-label="language.isKhmer ? 'សង្ខេបការលក់' : 'Sales overview'">
       <div class="sales-total">
@@ -161,7 +179,7 @@
                 </td>
                 <td class="text-center pe-4">
                   <span class="badge rounded-pill bg-success-subtle text-success px-2.5 py-1">
-                    {{ invoice.status || 'Paid' }}
+                    {{ invoiceStatusLabel(invoice.status || 'Paid') }}
                   </span>
                 </td>
               </tr>
@@ -215,7 +233,14 @@
             </span>
           </div>
 
-          <div v-if="!tax.lowStockItems?.length" class="text-center py-5 text-muted empty-state">
+          <div v-if="!tax.items?.length" class="text-center py-5 text-muted empty-state">
+            <i class="bi bi-box-seam fs-1 d-block mb-2"></i>
+            <strong class="d-block text-dark">{{ language.isKhmer ? 'មិនទាន់មានទំនិញទេ' : 'No inventory items yet' }}</strong>
+            <router-link to="/inventory/items/new" class="btn btn-sm btn-outline-primary mt-2">
+              {{ language.isKhmer ? 'បន្ថែមទំនិញ' : 'Add your first item' }}
+            </router-link>
+          </div>
+          <div v-else-if="!tax.lowStockItems?.length" class="text-center py-5 text-muted empty-state">
             <i class="bi bi-shield-check fs-1 text-success d-block mb-2"></i>
             <strong class="d-block text-dark">{{ language.t('stockHealthy') }}</strong>
             <small>{{ language.isKhmer ? 'កម្រិតស្តុកគ្រប់គ្រាន់សម្រាប់លក់' : 'All inventory counts are in healthy range.' }}</small>
@@ -227,15 +252,38 @@
 </template>
 
 <script setup>
-import { computed } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 import { useTaxStore } from '@/stores/tax';
 import { useLanguageStore } from '@/stores/language';
+import { useAuthStore } from '@/stores/auth';
 
 const tax = useTaxStore();
 const language = useLanguageStore();
+const auth = useAuthStore();
+const setupNeeded = ref(false);
+const setupError = ref('');
+
+onMounted(async () => {
+  try {
+    const profile = await auth.loadCompanyProfile();
+    setupNeeded.value = !profile.tin || !profile.registered_address || !profile.tax_registered_date;
+  } catch (error) {
+    setupNeeded.value = true;
+    setupError.value = error.message;
+  }
+});
 
 const money = (value) =>
   `$${(value || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+function invoiceStatusLabel(status) {
+  const value = String(status || '');
+  if (!language.isKhmer) return value;
+  if (value.toLowerCase() === 'paid') return 'បានបង់';
+  if (value.toLowerCase() === 'pending') return 'កំពុងរង់ចាំ';
+  if (value.toLowerCase() === 'partial' || value.toLowerCase() === 'partially paid') return 'បានបង់មួយផ្នែក';
+  return value;
+}
 
 const exchangeRate = computed(() => Number(tax.settings?.exchangeRate) || 4000);
 
@@ -283,7 +331,7 @@ const metrics = computed(() => [
   {
     label: language.t('vatCollected'),
     value: money(tax.totalVat),
-    subValue: `Rate: ${tax.settings?.vatRate || 10}%`,
+    subValue: `${language.isKhmer ? 'អត្រា៖' : 'Rate:'} ${tax.settings?.vatRate || 10}%`,
     note: `${tax.settings?.vatRate || 10}% ${language.t('outputVat')}`,
     icon: 'bi bi-receipt',
     tone: 'tone-amber',

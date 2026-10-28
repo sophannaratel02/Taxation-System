@@ -15,13 +15,19 @@
   --brand-accent: #d99b00;
 }
 html, body, #app { min-height: 100%; }
+html { scroll-behavior: smooth; }
 body {
   background: linear-gradient(180deg, #f7f9fc 0%, #edf3f8 100%);
   color: var(--ink);
   font-family: "Segoe UI", Inter, Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 #app { width: 100%; }
 a { text-decoration: none; }
+* {
+  -webkit-tap-highlight-color: transparent;
+}
 .card {
   border-radius: 14px;
   border: 1px solid var(--line);

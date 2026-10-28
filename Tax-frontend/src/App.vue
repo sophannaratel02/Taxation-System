@@ -9,17 +9,20 @@
         <p class="global-dialog-message">{{ dialog.message }}</p>
         <div class="global-dialog-actions">
           <button v-if="dialog.showCancel" type="button" class="btn btn-light border" @click="closeDialog(false)">
-            {{ dialog.cancelText }}
+            {{ dialog.cancelText === 'Cancel' ? language.t('cancel') : dialog.cancelText }}
           </button>
           <button type="button" class="btn" :class="confirmButtonClass" @click="closeDialog(true)">
-            {{ dialog.confirmText }}
+            {{ dialog.confirmText === 'Confirm' ? language.t('confirm') : dialog.confirmText === 'OK' ? language.t('ok') : dialog.confirmText }}
           </button>
         </div>
       </div>
     </div>
   </Transition>
 
-  <RouterView v-if="route.meta.public" />
+  <RouterView v-slot="{ Component }">
+    <Transition v-if="route.meta.public" name="route-fade" mode="out-in">
+      <component :is="Component" />
+    </Transition>
 
   <div v-else class="d-flex flex-column vh-100 app-shell">
     <!-- Top Executive Navigation Bar -->
@@ -30,7 +33,7 @@
           <button
             class="btn btn-icon d-lg-none"
             type="button"
-            aria-label="Toggle navigation"
+            :aria-label="language.t('toggleNavigation')"
             @click.stop="sidebarOpen = !sidebarOpen"
           >
             <i class="bi bi-list fs-5"></i>
@@ -38,11 +41,11 @@
 
           <router-link to="/" class="brand-link d-flex align-items-center text-decoration-none">
             <div class="brand-logo-wrapper">
-              <img :src="logoUrl" class="brand-logo" alt="Logo" />
+              <img :src="logoUrl" class="brand-logo" :alt="language.isKhmer ? 'និមិត្តសញ្ញា' : 'Logo'" />
             </div>
             <div class="d-flex flex-column ms-2 leading-tight">
               <span class="brand-title">AXIS CONSULTING</span>
-              <span class="brand-subtitle">TAX &amp; INVENTORY ERP</span>
+              <span class="brand-subtitle">{{ language.isKhmer ? 'ប្រព័ន្ធគ្រប់គ្រងពន្ធ និងសារពើភណ្ឌ' : 'TAX & INVENTORY ERP' }}</span>
             </div>
           </router-link>
         </div>
@@ -50,12 +53,12 @@
         <!-- Right: Real-time Context & Controls -->
         <div class="d-flex align-items-center gap-2 gap-md-3">
           <!-- Live Telemetry Status Pills -->
-          <div class="d-none d-md-flex align-items-center gap-2">
+          <div v-if="!isSuperAdmin" class="d-none d-md-flex align-items-center gap-2">
             <!-- Active Branch Pill -->
-            <div class="meta-pill" :title="language.isKhmer ? 'សាខាប្រតិបត្តិការបច្ចុប្បន្ន' : 'Active operating branch'">
+            <div class="meta-pill" :title="language.t('operatingBranch')">
               <span class="status-indicator"></span>
-              <span class="text-secondary small me-1">{{ language.isKhmer ? 'សាខា:' : 'Branch:' }}</span>
-              <span class="fw-semibold text-light">{{ tax.settings?.branch || 'Head Quarter' }}</span>
+              <span class="text-secondary small me-1">{{ language.t('branch') }}:</span>
+              <span class="fw-semibold text-light">{{ tax.settings?.branch || language.t('headOffice') }}</span>
             </div>
 
             <!-- Currency Rate Pill -->
@@ -69,15 +72,53 @@
           </div>
 
           <!-- Language Switcher -->
-          <button
-            class="language-toggle shadow-xs"
-            type="button"
-            :aria-label="`${language.t('language')}: ${language.isKhmer ? language.t('khmer') : language.t('english')}`"
-            @click="language.toggleLanguage"
-          >
-            <i class="bi bi-translate text-info"></i>
-            <span>{{ language.isKhmer ? 'ខ្មែរ' : 'EN' }}</span>
-          </button>
+          <div ref="languageDropdownRef" class="dropdown position-relative">
+            <button
+              class="language-toggle shadow-xs"
+              type="button"
+              aria-haspopup="menu"
+              :aria-expanded="languageMenuOpen"
+              :aria-label="language.t('language')"
+              @click.stop="languageMenuOpen = !languageMenuOpen"
+            >
+              <i class="bi bi-translate text-info" aria-hidden="true"></i>
+              <span>{{ language.isKhmer ? language.t('khmer') : language.t('english') }}</span>
+              <i class="bi bi-chevron-down language-chevron" :class="{ 'rotate-180': languageMenuOpen }" aria-hidden="true"></i>
+            </button>
+
+            <Transition name="dropdown-fade">
+              <ul v-if="languageMenuOpen" class="dropdown-menu dropdown-menu-end custom-dropdown language-menu show" role="menu">
+                <li>
+                  <button
+                    class="dropdown-item language-option"
+                    :class="{ 'is-selected': !language.isKhmer }"
+                    type="button"
+                    role="menuitemradio"
+                    :aria-checked="!language.isKhmer"
+                    @click="selectLanguage('en')"
+                  >
+                    <span class="language-option-code">EN</span>
+                    <span>{{ language.t('english') }}</span>
+                    <i v-if="!language.isKhmer" class="bi bi-check2 ms-auto text-primary" aria-hidden="true"></i>
+                  </button>
+                </li>
+                <li>
+                  <button
+                    class="dropdown-item language-option"
+                    :class="{ 'is-selected': language.isKhmer }"
+                    type="button"
+                    role="menuitemradio"
+                    :aria-checked="language.isKhmer"
+                    @click="selectLanguage('km')"
+                  >
+                    <span class="language-option-code">ខ្មែរ</span>
+                    <span>{{ language.t('khmer') }}</span>
+                    <i v-if="language.isKhmer" class="bi bi-check2 ms-auto text-primary" aria-hidden="true"></i>
+                  </button>
+                </li>
+              </ul>
+            </Transition>
+          </div>
 
           <div class="vr d-none d-md-block opacity-25 text-white my-2"></div>
 
@@ -95,11 +136,11 @@
 
               <div class="d-none d-sm-flex flex-column text-start me-1">
                 <span class="user-name text-truncate" style="max-width: 140px;">
-                  {{ currentUser?.name || 'Staff Member' }}
+                    {{ currentUser?.name || language.t('staffMember') }}
                 </span>
-                <span class="user-role">
-                  {{ isAdmin ? language.t('administrator') : language.t('staffUser') }}
-                </span>
+                <!-- <span class="user-role">
+                  {{ isSuperAdmin ? 'Super Admin' : displayAsStandardUser ? language.t('user') : isAdmin ? language.t('administrator') : language.t('user') }}
+                </span> -->
               </div>
 
               <i class="bi bi-chevron-down toggle-arrow" :class="{ 'rotate-180': profileOpen }"></i>
@@ -109,25 +150,30 @@
             <Transition name="dropdown-fade">
               <ul v-if="profileOpen" class="dropdown-menu dropdown-menu-end custom-dropdown shadow-lg show">
                 <li class="dropdown-header px-3 py-2">
-                  <div class="fw-bold text-dark text-truncate">{{ currentUser?.name || 'User' }}</div>
+                  <div class="fw-bold text-dark text-truncate">{{ currentUser?.name || language.t('user') }}</div>
                   <small class="text-muted d-block">
                     {{ language.t('signedInAs') }} 
                     <span class="text-primary fw-semibold">
-                      {{ isAdmin ? language.t('administrator') : language.t('staffUser') }}
+                      {{ isSuperAdmin ? 'Super Admin' : displayAsStandardUser ? language.t('user') : isAdmin ? language.t('administrator') : language.t('user') }}
                     </span>
                   </small>
                 </li>
+
                 <li><hr class="dropdown-divider my-1" /></li>
-                <li>
+                <li v-if="hasAdminAccess && !displayAsStandardUser && !isSuperAdmin">
                   <router-link to="/settings/users" class="dropdown-item py-2" @click="profileOpen = false">
                     <i class="bi bi-person-gear me-2 text-primary"></i>
                     {{ language.t('accessUsers') }}
                   </router-link>
                 </li>
-                <li>
+                <li v-if="hasAdminAccess && !isSuperAdmin">
                   <router-link to="/settings/company" class="dropdown-item py-2" @click="profileOpen = false">
                     <i class="bi bi-sliders me-2 text-secondary"></i>
                     {{ language.t('companyShops') }}
+                  </router-link>
+                  <router-link to="/company/profile" class="dropdown-item py-2" @click="profileOpen = false">
+                    <i class="bi bi-sliders me-2 text-secondary"></i>
+                    {{ language.t('companyProfile') }}
                   </router-link>
                 </li>
                 <li><hr class="dropdown-divider my-1" /></li>
@@ -163,7 +209,6 @@
           'shadow-xs',
           'd-flex',
           'flex-column',
-          'overflow-y-auto',
           'no-print',
           { 'is-open': sidebarOpen }
         ]"
@@ -175,144 +220,88 @@
           <span class="badge bg-light text-secondary border font-monospace small">v1.2.0</span>
         </div>
 
-        <div class="list-group list-group-flush small flex-grow-1 py-2 custom-scroll">
-          <!-- Main Dashboard -->
+        <nav class="sidebar-menu flex-grow-1 py-2 custom-scroll" :aria-label="language.t('navigation')">
           <router-link
-            :to="isAdmin ? '/admin' : '/user'"
-            class="list-group-item list-group-item-action d-flex align-items-center py-2"
+            :to="isSuperAdmin ? '/superadmin' : isAdmin ? '/admin' : '/user'"
+            class="sidebar-link sidebar-dashboard"
             active-class="active"
           >
-            <i class="bi bi-speedometer2 me-3 fs-6"></i>
-            <span>{{ language.t('dashboard') }}</span>
+            <i class="bi bi-speedometer2 sidebar-link-icon"></i>
+            <span>{{ isSuperAdmin ? (language.isKhmer ? 'ទិដ្ឋភាពទូទៅប្រព័ន្ធ' : 'Platform Overview') : language.t('dashboard') }}</span>
           </router-link>
 
-          <!-- Regular User Workspace -->
-          <template v-if="!isAdmin">
-            <div class="menu-header">{{ language.t('workspace') }}</div>
-            <router-link to="/user/files" class="list-group-item list-group-item-action py-2 ps-4" active-class="active">
-              <i class="bi bi-file-earmark-arrow-up me-2 text-secondary"></i> {{ language.isKhmer ? 'ឯកសាររបស់ខ្ញុំ' : 'My Files' }}
-            </router-link>
-            <router-link to="/user/leave" class="list-group-item list-group-item-action py-2 ps-4" active-class="active">
-              <i class="bi bi-calendar2-check me-2 text-secondary"></i> {{ language.t('leaveRequest') }}
-            </router-link>
-            <router-link to="/notifications" class="list-group-item list-group-item-action py-2 ps-4" active-class="active">
-              <i class="bi bi-bell me-2 text-secondary"></i> {{ language.t('notifications') }}
-            </router-link>
-            <router-link to="/settings/policy-notes" class="list-group-item list-group-item-action py-2 ps-4" active-class="active">
-              <i class="bi bi-file-earmark-lock me-2 text-secondary"></i> {{ language.t('policyControls') }}
-            </router-link>
-          </template>
+          <router-link v-if="!isSuperAdmin" to="/pos" class="sidebar-link sidebar-pos" active-class="active">
+            <i class="bi bi-cart4 sidebar-link-icon"></i>
+            <span>{{ language.isKhmer ? 'លក់ទំនិញ (POS)' : 'Open POS' }}</span>
+            <span class="sidebar-live-badge">{{ language.t('live') }}</span>
+          </router-link>
 
-          <!-- Admin Workspace -->
-          <template v-if="isAdmin">
-            <!-- Approval Center -->
-            <router-link to="/admin/approvals" class="list-group-item list-group-item-action d-flex align-items-center py-2 text-danger fw-semibold" active-class="active">
-              <i class="bi bi-check2-square me-3 fs-6"></i>
-              <span>{{ language.t('approvalCenter') }}</span>
-            </router-link>
-
-            <!-- POS Terminal Fast Action -->
-            <router-link
-              to="/pos"
-              class="list-group-item list-group-item-action d-flex align-items-center py-2 text-success fw-bold pos-highlight my-1"
-              active-class="active"
+          <section
+            v-for="section in menuSections"
+            :key="section.id"
+            class="sidebar-section"
+          >
+            <button
+              :id="`sidebar-toggle-${section.id}`"
+              class="sidebar-section-toggle"
+              :class="{ 'is-expanded': expandedMenu === section.id, 'has-active-route': isSectionActive(section) }"
+              type="button"
+              :aria-expanded="expandedMenu === section.id"
+              :aria-controls="`sidebar-panel-${section.id}`"
+              @click="toggleMenu(section.id)"
             >
-              <i class="bi bi-cart4 me-3 fs-6"></i>
-              <span>{{ language.isKhmer ? 'លក់ទំនិញ (POS)' : 'Open POS ' }}</span>
-              <span class="badge bg-success-subtle text-success ms-auto small">LIVE</span>
-            </router-link>
-
-            <!-- Customer & Sales -->
-            <div class="menu-header">{{ language.t('customerSales') }}</div>
-            <router-link to="/sales/invoices" class="list-group-item list-group-item-action py-2 ps-4" active-class="active">
-              <i class="bi bi-receipt me-2 text-secondary"></i> {{ language.t('salesHistory') }}
-            </router-link>
-            <router-link to="/sales/customers" class="list-group-item list-group-item-action py-2 ps-4" active-class="active">
-              <i class="bi bi-people me-2 text-secondary"></i> {{ language.t('customers') }}
-            </router-link>
-            <router-link to="/sales/ar" class="list-group-item list-group-item-action py-2 ps-4" active-class="active">
-              <i class="bi bi-wallet2 me-2 text-secondary"></i> {{ language.t('accountsReceivable') }}
-            </router-link>
-
-            <!-- Inventory Management -->
-            <div class="menu-header">{{ language.t('inventory') }}</div>
-            <router-link to="/inventory/items" class="list-group-item list-group-item-action py-2 ps-4" active-class="active">
-              <i class="bi bi-box-seam me-2 text-secondary"></i> {{ language.t('items') }}
-            </router-link>
-            <router-link to="/inventory/adjustments" class="list-group-item list-group-item-action py-2 ps-4" active-class="active">
-              <i class="bi bi-sliders me-2 text-secondary"></i> {{ language.t('stockAdjustment') }}
-            </router-link>
-            <router-link to="/inventory/history" class="list-group-item list-group-item-action py-2 ps-4" active-class="active">
-              <i class="bi bi-clock-history me-2 text-secondary"></i> {{ language.t('transactionHistory') }}
-            </router-link>
-
-            <!-- Vendor & Purchase -->
-            <div class="menu-header">{{ language.t('vendorPurchase') }}</div>
-            <router-link to="/purchase/vendors" class="list-group-item list-group-item-action py-2 ps-4" active-class="active">
-              <i class="bi bi-truck me-2 text-secondary"></i> {{ language.t('vendors') }}
-            </router-link>
-            <router-link to="/purchase/orders" class="list-group-item list-group-item-action py-2 ps-4" active-class="active">
-              <i class="bi bi-file-earmark-plus me-2 text-secondary"></i> {{ language.t('purchaseOrders') }}
-            </router-link>
-            <router-link to="/purchase/ap" class="list-group-item list-group-item-action py-2 ps-4" active-class="active">
-              <i class="bi bi-receipt-cutoff me-2 text-secondary"></i> {{ language.t('accountsPayable') }}
-            </router-link>
-
-            <!-- Reports & Analytics -->
-            <div class="menu-header">{{ language.t('reports') }}</div>
-            <router-link to="/reports/sales-by-staff" class="list-group-item list-group-item-action py-2 ps-4" active-class="active">
-              <i class="bi bi-person-lines-fill me-2 text-secondary"></i> {{ language.t('salesByStaff') }}
-            </router-link>
-            <router-link to="/reports/sales-by-vendor" class="list-group-item list-group-item-action py-2 ps-4" active-class="active">
-              <i class="bi bi-shop-window me-2 text-secondary"></i> {{ language.t('salesByVendor') }}
-            </router-link>
-            <router-link to="/reports/inventory-summary" class="list-group-item list-group-item-action py-2 ps-4" active-class="active">
-              <i class="bi bi-pie-chart me-2 text-secondary"></i> {{ language.t('inventorySummary') }}
-            </router-link>
-            <router-link to="/reports/tax-vat" class="list-group-item list-group-item-action py-2 ps-4 fw-semibold"active-class="active text-success"
-          :class="$route.path.includes('/reports/tax-vat') ? '' : 'text-danger'">
-          <i  class="bi bi-percent me-2" :class="$route.path.includes('/reports/tax-vat') ? 'text-success' : 'text-danger'"></i>  {{ language.t('taxReport') }}
-            </router-link>
-            <router-link to="/tax/declaration" class="list-group-item list-group-item-action py-2 ps-4" active-class="active">
-              <i class="bi bi-journal-text me-2 text-secondary"></i> {{ language.isKhmer ? 'ប្រកាសពន្ធប្រចាំខែ' : 'M-Tax Declaration' }}
-            </router-link>
-            <router-link to="/tax/annual-filing" class="list-group-item list-group-item-action py-2 ps-4" active-class="active">
-              <i class="bi bi-file-earmark-spreadsheet me-2 text-secondary"></i> {{ language.isKhmer ? 'ប្រកាសពន្ធលើប្រាក់ចំណូលប្រចាំឆ្នាំ' : 'Annual Tax Filing (TOI)' }}
-            </router-link>
-
-            <!-- System Settings -->
-            <div class="menu-header">{{ language.t('settings') }}</div>
-            <router-link to="/settings/company" class="list-group-item list-group-item-action py-2 ps-4" active-class="active">
-              <i class="bi bi-building me-2 text-secondary"></i> {{ language.t('companyShops') }}
-            </router-link>
-            <router-link to="/settings/policy" class="list-group-item list-group-item-action py-2 ps-4" active-class="active">
-              <i class="bi bi-file-earmark-lock me-2 text-secondary"></i> {{ language.t('policyControls') }}
-            </router-link>
-            <router-link to="/settings/users" class="list-group-item list-group-item-action py-2 ps-4" active-class="active">
-              <i class="bi bi-shield-lock me-2 text-secondary"></i> {{ language.t('accessUsers') }}
-            </router-link>
-          </template>
-        </div>
+              <i :class="['sidebar-section-icon', 'bi', section.icon]" aria-hidden="true"></i>
+              <span class="sidebar-section-label">{{ section.label }}</span>
+              <i class="bi bi-chevron-down sidebar-chevron" aria-hidden="true"></i>
+            </button>
+            <Transition name="sidebar-collapse">
+              <div
+                v-show="expandedMenu === section.id"
+                :id="`sidebar-panel-${section.id}`"
+                class="sidebar-submenu"
+                :aria-labelledby="`sidebar-toggle-${section.id}`"
+              >
+                <router-link
+                  v-for="item in section.items"
+                  :key="item.to"
+                  :to="item.to"
+                  class="sidebar-link sidebar-submenu-link"
+                  active-class="active"
+                >
+                  <i :class="['sidebar-link-icon', 'bi', item.icon]" aria-hidden="true"></i>
+                  <span>{{ item.label }}</span>
+                </router-link>
+              </div>
+            </Transition>
+          </section>
+        </nav>
 
         <div class="p-3 border-top text-center text-muted small bg-light d-flex justify-content-between align-items-center">
           <span class="font-monospace">INKLUSIVITY ERP</span>
-          <span class="status-dot bg-success rounded-circle" title="System Online"></span>
+          <span class="status-dot bg-success rounded-circle" :title="language.t('systemOnline')"></span>
         </div>
       </aside>
 
       <!-- Main Dynamic Workspace View -->
-      <main class="flex-grow-1 overflow-y-auto page-canvas">
-        <router-view />
+      <main class="flex-grow-1 overflow-y-auto page-canvas route-shell">
+        <Transition name="route-fade" mode="out-in">
+          <component :is="Component" />
+        </Transition>
       </main>
     </div>
   </div>
+  </RouterView>
 </template>
 
 <script setup>
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
+import { permissionForPath, userHasPermission } from '@/router/permissionAccess';
 import { useRoute, useRouter } from 'vue-router';
 import { useLanguageStore } from './stores/language';
 import { useTaxStore } from './stores/tax';
+import { useAuthStore } from './stores/auth';
+import { usePosStore } from './stores/pos';
+import { useFixedAssetsStore } from './stores/fixedAssets';
 import { closeDialog, dialogState } from './utils/dialog';
 import logoUrl from './assets/logo.svg';
 
@@ -320,10 +309,29 @@ const route = useRoute();
 const router = useRouter();
 const language = useLanguageStore();
 const tax = useTaxStore();
+const auth = useAuthStore();
+const pos = usePosStore();
+const fixedAssets = useFixedAssetsStore();
+
+function resetWorkspaceState() {
+  auth.reset();
+  tax.reset();
+  pos.reset();
+  fixedAssets.reset();
+}
+
+function handleUnauthorized() {
+  resetWorkspaceState();
+  currentUser.value = null;
+  router.push('/login');
+}
 
 const sidebarOpen = ref(false);
+const expandedMenu = ref('');
 const profileOpen = ref(false);
 const profileDropdownRef = ref(null);
+const languageMenuOpen = ref(false);
+const languageDropdownRef = ref(null);
 const dialog = dialogState;
 const dialogTitleId = 'app-global-dialog-title';
 const confirmButtonClass = computed(() => {
@@ -334,43 +342,166 @@ const confirmButtonClass = computed(() => {
 
 function getSafeStoredUser() {
   try {
-    return JSON.parse(localStorage.getItem('tax_user') || 'null');
+    const storedUser = globalThis.localStorage?.getItem('tax_user');
+    return storedUser ? JSON.parse(storedUser) : null;
   } catch {
     return null;
   }
 }
 
 const currentUser = ref(getSafeStoredUser());
-const isAdmin = computed(() => String(currentUser.value?.role || '').toLowerCase() === 'admin');
+const isSuperAdmin = computed(() => String(currentUser.value?.role || '').toLowerCase() === 'superadmin');
+const isAdmin = computed(() => String(currentUser.value?.role || '').toLowerCase() === 'owner');
+const isCompanyOwner = computed(() => String(currentUser.value?.role || '').toLowerCase() === 'owner');
+const displayAsStandardUser = computed(() => String(currentUser.value?.role || '').toLowerCase() === 'staff');
+const hasAdminAccess = computed(() => isCompanyOwner.value);
 
-// Auto close dropdown & menu when clicking outside
+const baseMenuSections = computed(() => [
+  {
+    id: 'sales',
+    label: language.t('customerSales'),
+    icon: 'bi-people',
+    items: [
+      { to: '/sales', icon: 'bi-graph-up-arrow', label: language.isKhmer ? 'របាយការណ៍លក់' : 'Sales' },
+      { to: '/sales/invoices', icon: 'bi-receipt', label: language.t('salesHistory') },
+      { to: '/sales/customers', icon: 'bi-people', label: language.t('customers') },
+      { to: '/sales/ar', icon: 'bi-wallet2', label: language.t('accountsReceivable') },
+    ],
+  },
+  {
+    id: 'inventory',
+    label: language.t('inventory'),
+    icon: 'bi-box-seam',
+    items: [
+      { to: '/inventory/items', icon: 'bi-box-seam', label: language.t('items') },
+      { to: '/inventory/adjustments', icon: 'bi-sliders', label: language.t('stockAdjustment') },
+      { to: '/inventory/history', icon: 'bi-clock-history', label: language.t('transactionHistory') },
+      { to: '/inventory/stock-costs', icon: 'bi-currency-dollar', label: language.isKhmer ? 'ថ្លៃដើមស្តុក' : 'Stock Costs' },
+      { to: '/inventory/transfers', icon: 'bi-arrow-left-right', label: language.isKhmer ? 'ផ្ទេរស្តុក' : 'Stock transfers' },
+    ],
+  },
+  {
+    id: 'purchases',
+    label: language.t('vendorPurchase'),
+    icon: 'bi-truck',
+    items: [
+      { to: '/purchase/vendors', icon: 'bi-truck', label: language.t('vendors') },
+      { to: '/purchase/orders', icon: 'bi-file-earmark-plus', label: language.t('purchaseOrders') },
+      { to: '/purchase/ap', icon: 'bi-receipt-cutoff', label: language.t('accountsPayable') },
+    ],
+  },
+  {
+    id: 'reports',
+    label: language.t('reports'),
+    icon: 'bi-bar-chart-line',
+    items: [
+      { to: '/reports/sales-by-vendor', icon: 'bi-shop-window', label: language.t('salesByVendor') },
+      { to: '/reports/inventory-summary', icon: 'bi-pie-chart', label: language.t('inventorySummary') },
+      { to: '/reports/tax-vat', icon: 'bi-percent', label: language.t('taxReport') },
+      { to: '/tax/declaration', icon: 'bi-journal-text', label: language.isKhmer ? 'ប្រកាសពន្ធប្រចាំខែ' : 'M-Tax Declaration' },
+      { to: '/tax/annual-filing', icon: 'bi-file-earmark-spreadsheet', label: language.isKhmer ? 'ប្រកាសពន្ធលើប្រាក់ចំណូលប្រចាំឆ្នាំ' : 'Annual Tax Filing (TOI)' },
+    ],
+  },
+  {
+    id: 'settings',
+    label: language.t('settings'),
+    icon: 'bi-gear',
+    items: [
+      { to: '/company/profile', icon: 'bi-building', label: language.isKhmer ? 'ព័ត៌មានក្រុមហ៊ុន' : 'Company data profile' },
+      { to: '/settings/company', icon: 'bi-building', label: language.t('companyShops') },
+      { to: '/settings/users', icon: 'bi-shield-lock', label: language.t('accessUsers') },
+    ],
+  },
+]);
+
+const filterMenuItems = (items) => items.filter(({ to }) => {
+  const permission = permissionForPath(to);
+  return permission !== 'staff.manage'
+    ? userHasPermission(currentUser.value, permission)
+    : isCompanyOwner.value;
+});
+
+const userMenuSections = computed(() => [
+  ...baseMenuSections.value
+    .map((section) => ({
+      ...section,
+      items: filterMenuItems(section.items),
+    }))
+    .filter((section) => section.items.length),
+]);
+
+const platformMenuSections = computed(() => [
+  {
+    id: 'platform',
+    label: language.isKhmer ? 'គ្រប់គ្រងប្រព័ន្ធ' : 'Platform',
+    icon: 'bi-building-gear',
+    items: [
+      { to: '/superadmin', icon: 'bi-speedometer2', label: language.isKhmer ? 'ទិដ្ឋភាពទូទៅប្រព័ន្ធ' : 'Platform overview' },
+    ],
+  },
+]);
+
+const menuSections = computed(() => {
+  if (isSuperAdmin.value) return platformMenuSections.value;
+  return userMenuSections.value;
+});
+
+const routeMatchesPath = (targetPath, currentPath = route.path) => currentPath === targetPath || currentPath.startsWith(`${targetPath}/`);
+
+function isSectionActive(section) {
+  return section.items.some(({ to }) => routeMatchesPath(to));
+}
+
+function sectionForPath(path) {
+  return menuSections.value.find((section) => section.items.some(({ to }) => routeMatchesPath(to, path)));
+}
+
+function toggleMenu(sectionId) {
+  expandedMenu.value = expandedMenu.value === sectionId ? '' : sectionId;
+}
+
+function selectLanguage(nextLanguage) {
+  language.setLanguage(nextLanguage);
+  languageMenuOpen.value = false;
+}
+
 function handleClickOutside(event) {
   if (profileDropdownRef.value && !profileDropdownRef.value.contains(event.target)) {
     profileOpen.value = false;
   }
+  if (languageDropdownRef.value && !languageDropdownRef.value.contains(event.target)) {
+    languageMenuOpen.value = false;
+  }
+}
+
+function syncCurrentUserState() {
+  currentUser.value = getSafeStoredUser();
+  expandedMenu.value = sectionForPath(route.path)?.id || '';
+  sidebarOpen.value = false;
+  profileOpen.value = false;
+  languageMenuOpen.value = false;
 }
 
 onMounted(() => {
   document.addEventListener('click', handleClickOutside);
+  window.addEventListener('auth:unauthorized', handleUnauthorized);
 });
 
 onUnmounted(() => {
   document.removeEventListener('click', handleClickOutside);
+  window.removeEventListener('auth:unauthorized', handleUnauthorized);
 });
 
-// Sync route changes
 watch(
   () => route.fullPath,
   () => {
-    currentUser.value = getSafeStoredUser();
-    sidebarOpen.value = false;
-    profileOpen.value = false;
-  }
+    syncCurrentUserState();
+  },
+  { immediate: true }
 );
 
 function logout() {
-  localStorage.removeItem('tax_token');
-  localStorage.removeItem('tax_user');
+  resetWorkspaceState();
   currentUser.value = null;
   router.push('/login');
 }
@@ -378,26 +509,55 @@ function logout() {
 
 <style scoped>
 .app-shell {
-  background-color: #f8fafc;
+  background: linear-gradient(180deg, #f8fafc 0%, #eef5fb 100%);
   color: #1e293b;
+}
+
+.page-canvas {
+  scroll-behavior: smooth;
+}
+
+.route-shell {
+  position: relative;
+  isolation: isolate;
+}
+
+.route-fade-enter-active,
+.route-fade-leave-active {
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.route-fade-enter-from,
+.route-fade-leave-to {
+  opacity: 0;
+  transform: translateY(8px);
+}
+
+.route-fade-enter-to,
+.route-fade-leave-from {
+  opacity: 1;
+  transform: translateY(0);
 }
 
 /* 1. Top Navbar */
 .top-navbar {
   height: 64px;
-  background: #0b1329; /* High-grade deep slate navy */
+  background: linear-gradient(180deg, #0b1329 0%, #101d33 100%);
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
   display: flex;
   align-items: center;
   position: relative;
   z-index: 1030;
+  box-shadow: 0 12px 24px rgba(15, 23, 42, 0.16);
 }
 
 .brand-link {
-  transition: opacity 0.2s ease;
+  transition: opacity 0.2s ease, transform 0.2s ease;
+  will-change: transform, opacity;
 }
 .brand-link:hover {
-  opacity: 0.9;
+  opacity: 0.94;
+  transform: translateY(-1px);
 }
 
 .brand-logo-wrapper {
@@ -486,12 +646,53 @@ function logout() {
   color: #fff;
   font-size: 0.78rem;
   font-weight: 700;
-  transition: all 0.2s ease;
+  transition: transform 0.2s ease, background-color 0.2s ease, border-color 0.2s ease;
+  will-change: transform, background-color, border-color;
 }
 
 .language-toggle:hover {
   background: rgba(255, 255, 255, 0.16);
+  border-color: rgba(255, 255, 255, 0.28);
+  transform: translateY(-1px);
   color: #fff;
+}
+
+.language-chevron {
+  font-size: 0.62rem;
+  color: #94a3b8;
+  transition: transform 0.2s ease;
+}
+
+.language-menu {
+  min-width: 190px;
+  margin-top: 8px;
+}
+
+.language-option {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  min-height: 40px;
+  padding: 0.55rem 0.65rem;
+}
+
+.language-option.is-selected {
+  background: #eff6ff;
+  color: #174db5;
+  font-weight: 600;
+}
+
+.language-option-code {
+  display: inline-grid;
+  width: 30px;
+  height: 24px;
+  place-items: center;
+  border: 1px solid #e2e8f0;
+  border-radius: 5px;
+  background: #f8fafc;
+  color: #475569;
+  font-size: 0.68rem;
+  font-weight: 700;
 }
 
 .btn-icon {
@@ -517,12 +718,14 @@ function logout() {
   border-radius: 9999px;
   color: #f8fafc;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: transform 0.2s ease, background-color 0.2s ease, border-color 0.2s ease;
+  will-change: transform, background-color, border-color;
 }
 
 .user-profile-btn:hover {
   background: rgba(255, 255, 255, 0.1);
   border-color: rgba(255, 255, 255, 0.2);
+  transform: translateY(-1px);
 }
 
 .avatar-circle {
@@ -621,33 +824,188 @@ function logout() {
   font-size: 0.68rem;
 }
 
-.menu-header {
-  padding: 14px 16px 4px;
-  font-size: 0.68rem;
-  font-weight: 800;
-  text-transform: uppercase;
+.sidebar-menu {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-inline: 10px;
+}
+
+.sidebar-link,
+.sidebar-section-toggle {
+  min-height: 42px;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border: 0;
+  border-radius: 9px;
+  padding: 9px 12px;
+  background: transparent;
+  color: #475569;
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 550;
+  line-height: 1.35;
+  text-align: left;
+  text-decoration: none;
+  transition: color 0.16s ease, background-color 0.16s ease, box-shadow 0.16s ease;
+}
+
+.sidebar-link:hover,
+.sidebar-section-toggle:hover {
+  background: #f1f5f9;
+  color: #123b66;
+}
+
+.sidebar-link:focus-visible,
+.sidebar-section-toggle:focus-visible {
+  outline: 3px solid rgba(13, 110, 253, 0.28);
+  outline-offset: 1px;
+}
+
+.sidebar-dashboard,
+.sidebar-standalone {
+  margin-bottom: 3px;
+}
+
+.sidebar-link-icon,
+.sidebar-section-icon {
+  flex: 0 0 20px;
+  width: 20px;
+  color: #8492a6;
+  font-size: 1rem;
+  text-align: center;
+  transition: color 0.16s ease;
+}
+
+.sidebar-link.active {
+  background: #eaf2ff;
+  box-shadow: inset 3px 0 #2463eb;
+  color: #174db5;
+  font-weight: 650;
+}
+
+.sidebar-link.active .sidebar-link-icon,
+.sidebar-section-toggle.has-active-route .sidebar-section-icon {
+  color: #2463eb;
+}
+
+.sidebar-section {
+  margin-top: 3px;
+}
+
+.sidebar-section-toggle {
+  cursor: pointer;
+  color: #334155;
+  font-weight: 650;
+}
+
+.sidebar-section-toggle.is-expanded {
+  background: #f8fafc;
+}
+
+.sidebar-section-toggle.has-active-route:not(.is-expanded) {
+  color: #174db5;
+}
+
+.sidebar-section-label {
+  flex: 1;
+  min-width: 0;
+}
+
+.sidebar-chevron {
   color: #94a3b8;
+  font-size: 0.72rem;
+  transition: transform 0.18s ease, color 0.18s ease;
+}
+
+.sidebar-section-toggle.is-expanded .sidebar-chevron {
+  transform: rotate(180deg);
+  color: #64748b;
+}
+
+.sidebar-submenu {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 3px 0 7px 12px;
+  padding: 3px 0 3px 8px;
+  border-left: 1px solid #e2e8f0;
+}
+
+.sidebar-submenu-link {
+  min-height: 38px;
+  padding: 8px 10px;
+  font-size: 0.79rem;
+}
+
+.sidebar-submenu-link .sidebar-link-icon {
+  font-size: 0.94rem;
+}
+
+.sidebar-pos {
+  margin: 4px 0 8px;
+  background: #ecfdf5;
+  color: #047857;
+  font-weight: 700;
+}
+
+.sidebar-pos .sidebar-link-icon {
+  color: #059669;
+}
+
+.sidebar-pos:hover {
+  background: #d1fae5;
+  color: #065f46;
+}
+
+.sidebar-pos.active {
+  background: #d1fae5;
+  box-shadow: inset 3px 0 #059669;
+  color: #065f46;
+}
+
+.sidebar-live-badge {
+  margin-left: auto;
+  border-radius: 999px;
+  padding: 3px 7px;
+  background: #d1fae5;
+  color: #047857;
+  font-size: 0.58rem;
+  font-weight: 800;
   letter-spacing: 0.06em;
 }
 
-.sidebar-wrapper .list-group-item {
-  border: none;
-  border-left: 3px solid transparent;
-  color: #475569;
-  font-weight: 500;
-  transition: background-color 0.15s, color 0.15s;
+.sidebar-collapse-enter-active,
+.sidebar-collapse-leave-active {
+  max-height: 420px;
+  overflow: hidden;
+  transition: max-height 0.2s ease, opacity 0.16s ease, transform 0.16s ease;
 }
 
-.sidebar-wrapper .list-group-item:hover {
-  background-color: #f8fafc;
-  color: #0d6efd;
+.sidebar-collapse-enter-from,
+.sidebar-collapse-leave-to {
+  max-height: 0;
+  opacity: 0;
+  transform: translateY(-4px);
 }
 
-.sidebar-wrapper .list-group-item.active {
-  background-color: #eff6ff;
-  color: #0d6efd;
-  font-weight: 600;
-  border-left-color: #0d6efd;
+@media (prefers-reduced-motion: reduce) {
+  .sidebar-link,
+  .sidebar-section-toggle,
+  .sidebar-chevron,
+  .sidebar-collapse-enter-active,
+  .sidebar-collapse-leave-active,
+  .route-fade-enter-active,
+  .route-fade-leave-active,
+  .dropdown-fade-enter-active,
+  .dropdown-fade-leave-active {
+    transition: none;
+  }
 }
 
 .pos-highlight {

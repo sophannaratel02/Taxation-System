@@ -20,10 +20,15 @@
           <div class="card-body p-4">
             <h2 class="h5 fw-bold mb-3"><i class="bi bi-safe2 me-2 text-primary"></i>{{ register ? (language.isKhmer ? 'បិទថតប្រាក់' : 'Close cash drawer') : (language.isKhmer ? 'បើកថតប្រាក់' : 'Open cash drawer') }}</h2>
             <label class="form-label">{{ language.isKhmer ? 'សាខា' : 'Branch' }}</label>
-            <select v-model="branch" class="form-select mb-3"><option>Head Quarter</option><option>Downtown Shop</option><option>Main Warehouse</option></select>
+            <select v-model="branch" class="form-select mb-3" :disabled="saving || !branchOptions.length">
+              <option v-for="option in branchOptions" :key="option" :value="option">{{ option }}</option>
+            </select>
+            <div v-if="!branchOptions.length" class="alert alert-warning py-2">
+              {{ language.isKhmer ? 'គណនីនេះមិនទាន់មានសាខាដែលបានអនុញ្ញាតទេ។' : 'No authorized branches are assigned to this account.' }}
+            </div>
             <label class="form-label">{{ register ? (language.isKhmer ? 'សាច់ប្រាក់រាប់បាន' : 'Counted cash') : (language.isKhmer ? 'សាច់ប្រាក់ដើម' : 'Starting cash') }}</label>
-            <div class="input-group mb-3"><span class="input-group-text">$</span><input v-model.number="cash" class="form-control" type="number" min="0" step="0.01" /></div>
-            <button class="btn w-100" :class="register ? 'btn-danger' : 'btn-primary'" :disabled="saving" @click="register ? closeRegister() : openRegister()">
+            <div class="input-group mb-3"><span class="input-group-text">$</span><input v-model.number="cash" class="form-control" type="number" min="0" step="0.01" :disabled="saving || !branchOptions.length" /></div>
+            <button class="btn w-100" :class="register ? 'btn-danger' : 'btn-primary'" :disabled="saving || !branch || !branchOptions.length" @click="register ? closeRegister() : openRegister()">
               <span v-if="saving" class="spinner-border spinner-border-sm me-2"></span>
               {{ register ? (language.isKhmer ? 'បិទវេន និងបង្កើត Z-Report' : 'Close & create Z-Report') : (language.isKhmer ? 'បើកវេនលក់' : 'Open register') }}
             </button>
@@ -40,7 +45,7 @@
             </div>
             <div v-else class="text-muted py-4"><i class="bi bi-info-circle me-2"></i>{{ language.isKhmer ? 'សូមបើកវេនមុនពេលលក់។' : 'Open a register before processing sales.' }}</div>
             <hr />
-            <p class="small text-muted mb-0">X-Report shows the current shift totals. Z-Report is created when the drawer is closed and records any cash variance.</p>
+            <p class="small text-muted mb-0">{{ language.isKhmer ? 'របាយការណ៍ X បង្ហាញចំនួនសរុបនៃវេនបច្ចុប្បន្ន។ របាយការណ៍ Z ត្រូវបានបង្កើតនៅពេលបិទថតប្រាក់ និងកត់ត្រាភាពខុសគ្នានៃសាច់ប្រាក់។' : 'X-Report shows the current shift totals. Z-Report is created when the drawer is closed and records any cash variance.' }}</p>
           </div>
         </div>
       </div>
@@ -49,7 +54,7 @@
 </template>
 
 <script setup>
-import { onMounted, ref, watch } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 import { api } from '@/services/api';
 import { useTaxStore } from '@/stores/tax';
 import { useLanguageStore } from '@/stores/language';
@@ -57,15 +62,34 @@ import { confirmDialog } from '@/utils/dialog';
 
 const tax = useTaxStore();
 const language = useLanguageStore();
+const branchOptions = computed(() => {
+  const availableBranches = tax.settings?.availableBranches;
+  if (Array.isArray(availableBranches)) return availableBranches;
+  return tax.settings?.branch ? [tax.settings.branch] : ['Head Quarter'];
+});
 const branch = ref(tax.settings?.branch || 'Head Quarter');
 const cash = ref(0);
 const register = ref(null);
 const saving = ref(false);
 const error = ref('');
 const result = ref('');
+let latestRegisterRequest = 0;
 
 function formatDate(value) { return value ? new Date(value).toLocaleString() : '-'; }
-async function load() { try { register.value = await api.currentRegister(branch.value); } catch (requestError) { error.value = requestError.message; } }
+async function load() {
+  const requestId = ++latestRegisterRequest;
+  if (!branch.value) {
+    register.value = null;
+    return;
+  }
+  error.value = '';
+  try {
+    const currentRegister = await api.currentRegister(branch.value);
+    if (requestId === latestRegisterRequest) register.value = currentRegister;
+  } catch (requestError) {
+    if (requestId === latestRegisterRequest) error.value = requestError.message;
+  }
+}
 async function openRegister() { saving.value = true; error.value = ''; try { register.value = await api.openRegister({ branch: branch.value, startingCash: cash.value }); result.value = language.isKhmer ? 'វេនត្រូវបានបើកដោយជោគជ័យ។' : 'Register opened successfully.'; } catch (requestError) { error.value = requestError.message; } finally { saving.value = false; } }
 async function closeRegister() {
   const confirmed = await confirmDialog({
@@ -89,6 +113,23 @@ async function closeRegister() {
     saving.value = false;
   }
 }
-watch(branch, load);
+watch(branchOptions, (branches) => {
+  if (!branches.length) {
+    branch.value = '';
+    register.value = null;
+    return;
+  }
+  if (!branches.includes(branch.value)) {
+    branch.value = branches.includes(tax.settings?.branch) ? tax.settings.branch : branches[0];
+  }
+}, { immediate: true });
+watch(branch, (value, previousValue) => {
+  if (value !== previousValue) {
+    cash.value = 0;
+    result.value = '';
+    register.value = null;
+  }
+  load();
+});
 onMounted(load);
 </script>

@@ -29,16 +29,16 @@
     <!-- Notification Alerts -->
     <div v-if="error" class="alert alert-danger d-flex justify-content-between align-items-center" role="alert">
       <span>{{ error }}</span>
-      <button class="btn-close" type="button" aria-label="Close" @click="error = ''"></button>
+      <button class="btn-close" type="button" :aria-label="isKhmer ? 'បិទ' : 'Close'" @click="error = ''"></button>
     </div>
 
     <div v-if="success" class="alert alert-success alert-dismissible fade show" role="status">
       <span>{{ success }}</span>
-      <button class="btn-close" type="button" aria-label="Close" @click="success = ''"></button>
+      <button class="btn-close" type="button" :aria-label="isKhmer ? 'បិទ' : 'Close'" @click="success = ''"></button>
     </div>
 
     <!-- Tax Period Settings Panel -->
-    <section class="period-panel mb-4" aria-label="Tax period settings">
+    <section class="period-panel mb-4" :aria-label="isKhmer ? 'ការកំណត់រយៈពេលពន្ធ' : 'Tax period settings'">
       <div class="period-heading d-flex flex-wrap justify-content-between align-items-center gap-2">
         <div class="d-flex align-items-center gap-2">
           <span class="period-mark">
@@ -57,7 +57,7 @@
             v-model="selectedPeriodId" 
             class="form-select period-select" 
             :disabled="loading" 
-            aria-label="Select tax period" 
+            :aria-label="isKhmer ? 'ជ្រើសរើសរយៈពេលពន្ធ' : 'Select tax period'"
             @change="loadSelectedPeriod"
           >
             <option v-for="entry in periods" :key="entry.id" :value="String(entry.id)">
@@ -66,7 +66,7 @@
           </select>
 
           <span v-if="periodForm.status" class="badge status-badge" :class="`status-${periodForm.status}`">
-            {{ periodForm.status }}
+            {{ statusLabel(periodForm.status) }}
           </span>
 
           <button class="btn btn-outline-primary" type="button" :disabled="loading" @click="createPeriod">
@@ -143,7 +143,7 @@
     </section>
 
     <!-- Navigation Tabs -->
-    <nav class="tax-tabs nav nav-tabs mb-3" aria-label="Tax declaration sections">
+    <nav class="tax-tabs nav nav-tabs mb-3" :aria-label="isKhmer ? 'ផ្នែកលិខិតប្រកាសពន្ធ' : 'Tax declaration sections'">
       <button 
         v-for="tab in tabs" 
         :key="tab.id" 
@@ -587,7 +587,7 @@
 
           <div class="paper-meta">
             <span>{{ isKhmer ? 'អត្រាប្តូរប្រាក់ NBC' : 'NBC Exchange Rate' }}: {{ money(periodForm.nbc_exchange_rate) }} KHR/USD</span>
-            <span>{{ isKhmer ? 'ស្ថានភាព' : 'Status' }}: {{ periodForm.status }}</span>
+            <span>{{ isKhmer ? 'ស្ថានភាព' : 'Status' }}: {{ statusLabel(periodForm.status) }}</span>
           </div>
 
           <table class="table paper-table">
@@ -770,7 +770,7 @@ const fields = {
     { key: 'supplier_name', en: 'Supplier name', kh: 'ឈ្មោះអ្នកផ្គត់ផ្គង់', required: true },
     { key: 'supplier_tin', en: 'Supplier TIN', kh: 'លេខអត្តសញ្ញាណពន្ធអ្នកផ្គត់ផ្គង់' },
     { key: 'description', en: 'Description', kh: 'បរិយាយ', wide: true },
-    { key: 'quantity', en: 'Quantity', kh: 'បរិមាណ', type: 'number', min: 0, step: '0.001' },
+    { key: 'quantity', en: 'Quantity', kh: 'បរិមាណ', type: 'number', min: 0, step: '1' },
     { 
       key: 'expense_type', 
       en: 'Purchase type', 
@@ -919,6 +919,17 @@ function fieldLabel(field) { return isKhmer.value ? field.kh : field.en; }
 function optionLabel(option) { return isKhmer.value ? option.kh : option.en; }
 function purchaseTypeLabel(type) { return label(purchaseTypes.find((item) => item.id === type) || { en: type, kh: type }); }
 
+function statusLabel(status) {
+  const value = String(status || '');
+  const labels = {
+    draft: ['ព្រាង', 'Draft'],
+    filed: ['បានដាក់', 'Filed'],
+    locked: ['បានចាក់សោ', 'Locked'],
+  };
+  const localized = labels[value.toLowerCase()];
+  return localized ? localized[isKhmer.value ? 0 : 1] : value;
+}
+
 function money(value) {
   return new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 }).format(Math.round(Number(value) || 0));
 }
@@ -937,7 +948,7 @@ function monthName(month) {
 }
 
 function periodName(period) {
-  return `${monthName(period.period_month)} ${period.period_year} · ${period.status}`;
+  return `${monthName(period.period_month)} ${period.period_year} · ${statusLabel(period.status)}`;
 }
 
 function purchaseDate(value) {
@@ -1138,6 +1149,11 @@ async function saveRecord() {
     const payload = { ...recordForm };
 
     if (recordKind.value === 'purchases') {
+      if (!Number.isSafeInteger(Number(payload.quantity)) || Number(payload.quantity) < 0) {
+        throw new Error(isKhmer.value
+          ? 'បរិមាណត្រូវតែជាចំនួនគត់មិនអវិជ្ជមាន។'
+          : 'Quantity must be a non-negative whole number.');
+      }
       if (Number(payload.amount_usd) > 0) payload.amount_khr = usdToKhr(payload.amount_usd);
       if (payload.expense_type === 'non_taxable') {
         payload.vat_rate = 0;

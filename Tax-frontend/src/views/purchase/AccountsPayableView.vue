@@ -9,7 +9,7 @@
             <i class="bi bi-receipt-cutoff"></i>
             <span>{{ language.t('vendorPurchase') }}</span>
             <span class="text-muted">·</span>
-            <span>Accounts Payable</span>
+            <span>{{ language.isKhmer ? 'គណនីត្រូវសង' : 'Accounts Payable' }}</span>
           </div>
           <h1 class="h3 fw-bold text-dark mb-1 tracking-tight">
             {{ language.isKhmer ? 'គណនីត្រូវសង (Accounts Payable)' : language.t('accountsPayable') }}
@@ -39,7 +39,7 @@
     <div v-if="error" class="alert alert-danger alert-dismissible fade show d-flex align-items-center mb-4 rounded-3 shadow-sm" role="alert">
       <i class="bi bi-exclamation-triangle-fill me-2 fs-5"></i>
       <div>{{ error }}</div>
-      <button type="button" class="btn-close ms-auto" aria-label="Close" @click="error = ''"></button>
+      <button type="button" class="btn-close ms-auto" :aria-label="language.isKhmer ? 'បិទ' : 'Close'" @click="error = ''"></button>
     </div>
 
     <!-- Summary Metrics (Bento Grid) -->
@@ -89,7 +89,7 @@
             <input
               v-model.trim="search"
               class="form-control border-start-0 shadow-none"
-              :placeholder="language.isKhmer ? 'ស្វែងរកអ្នកផ្គត់ផ្គង់, លេខបញ្ជាទិញ...' : 'Search vendor or PO...'"
+              :placeholder="language.isKhmer ? 'ស្វែងរកព័ត៌មានអ្នកផ្គត់ផ្គង់ និងបញ្ជាទិញ...' : 'Search vendor, order, dates, amounts, status...'"
             />
             <button v-if="search" class="btn btn-outline-secondary border-start-0 border-end" type="button" @click="search = ''">
               <i class="bi bi-x"></i>
@@ -264,7 +264,7 @@
               </label>
               <select v-model="paymentMethod" class="form-select">
                 <option value="cash">{{ language.t('cash') }}</option>
-                <option value="bank">{{ language.t('cardQr') }} (Bank Transfer / KHQR)</option>
+                <option value="bank">{{ language.t('cardQr') }} ({{ language.isKhmer ? 'ផ្ទេរតាមធនាគារ' : 'Bank Transfer' }} / KHQR)</option>
               </select>
             </div>
 
@@ -275,7 +275,7 @@
               <input
                 v-model.trim="paymentReference"
                 class="form-control font-monospace"
-                :placeholder="language.isKhmer ? 'ឧ. TRX-882193 ឬ Cheque #' : 'e.g. Bank slip or check number'"
+                :placeholder="language.isKhmer ? 'ឧ. TRX-882193 ឬ មូលប្បទានប័ត្រ #' : 'e.g. Bank slip or check number'"
               />
             </div>
 
@@ -307,6 +307,7 @@ import { api } from '@/services/api';
 import { useLanguageStore } from '@/stores/language';
 import { useTaxStore } from '@/stores/tax';
 import { alertDialog } from '@/utils/dialog';
+import { matchesSearch } from '@/utils/search';
 
 const language = useLanguageStore();
 const tax = useTaxStore();
@@ -432,12 +433,7 @@ async function pay() {
 
 const filteredRecords = computed(() => {
   if (!search.value) return records.value;
-  const q = search.value.toLowerCase();
-  return records.value.filter(
-    (r) =>
-      (r.vendor || '').toLowerCase().includes(q) ||
-      String(r.order || r.orderId || '').toLowerCase().includes(q)
-  );
+  return records.value.filter((record) => matchesSearch(search.value, record));
 });
 
 const totalOutstanding = computed(() =>

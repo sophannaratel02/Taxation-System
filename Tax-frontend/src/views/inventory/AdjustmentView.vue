@@ -9,7 +9,7 @@
             <i class="bi bi-box-arrow-in-down-right"></i>
             <span>{{ language.isKhmer ? 'ការគ្រប់គ្រងស្តុក' : 'Inventory & Stock Control' }}</span>
             <span class="text-muted">·</span>
-            <span>Audit Trail Engine</span>
+            <span>{{ language.isKhmer ? 'ប្រព័ន្ធកំណត់ត្រាសវនកម្ម' : 'Audit Trail Engine' }}</span>
           </div>
           <h1 class="h3 fw-bold text-dark mb-1 tracking-tight">
             {{ language.t('stockAdjustment') }}
@@ -24,7 +24,10 @@
 
         <div class="d-flex align-items-center gap-2">
           <span class="badge rounded-pill bg-light text-secondary border px-3 py-2">
-            <i class="bi bi-shield-check text-success me-1"></i>Strict Audit Mode
+            <i class="bi bi-shield-check text-success me-1"></i>            {{ negativeStockBlocked
+              ? (language.isKhmer ? 'ទប់ស្កាត់ស្តុកអវិជ្ជមាន' : 'Strict Stock Mode')
+              : (language.isKhmer ? 'អនុញ្ញាតស្តុកអវិជ្ជមាន' : 'Negative Stock Allowed')
+            }}
           </span>
         </div>
       </div>
@@ -92,6 +95,14 @@
                 {{ projectedQty }} {{ selectedItemUnit }}
               </span>
             </div>
+            <div
+              v-if="projectedQty < 0 && !negativeStockBlocked"
+              class="alert alert-warning py-2 px-3 mt-3 mb-0 small"
+              role="status"
+            >
+              <i class="bi bi-exclamation-triangle-fill me-1"></i>
+              {{ language.isKhmer ? 'ការបញ្ជាទិញក្រោយ / ស្តុកអវិជ្ជមាន៖ ការកែតម្រូវនេះនឹងធ្វើឱ្យសាខាមានស្តុកខ្វះ។' : 'Backorder / Negative Stock: this adjustment will leave a branch deficit.' }}
+            </div>
           </div>
 
           <!-- Quantity Input -->
@@ -105,6 +116,7 @@
               <input
                 v-model.number="form.quantity"
                 type="number"
+                step="1"
                 class="form-control border-start-0 font-monospace fw-semibold"
                 :placeholder="language.isKhmer ? 'ឧ. +5 ឬ -3' : 'e.g. +5 or -3'"
                 required
@@ -116,7 +128,7 @@
             <div class="form-text small text-muted mt-1">
               {{ language.isKhmer 
                 ? 'បញ្ចូលលេខវិជ្ជមាន (+) ដើម្បីបន្ថែមស្តុក ឬលេខអវិជ្ជមាន (-) ដើម្បីបន្ថយស្តុក។' 
-                : 'Use positive (+) to increment stock, negative (-) to write-off/deduct.' 
+                : 'Use positive (+) to add stock as a new batch, or negative (-) to write off stock from the oldest available batches (FIFO).'
               }}
             </div>
           </div>
@@ -212,7 +224,7 @@
                       class="badge rounded-pill px-3 py-1 font-monospace small"
                       :class="row.type === 'ADJUSTMENT' ? 'bg-warning-subtle text-warning-emphasis' : 'bg-light text-secondary border'"
                     >
-                      {{ row.type || 'Movement' }}
+                      {{ row.type === 'ADJUSTMENT' ? language.t('stockAdjustment') : (row.type || (language.isKhmer ? 'ចលនា' : 'Movement')) }}
                     </span>
                   </td>
                   <td class="text-end font-monospace fw-bold fs-6">
@@ -261,6 +273,7 @@ import { alertDialog } from '@/utils/dialog';
 
 const tax = useTaxStore();
 const language = useLanguageStore();
+const negativeStockBlocked = computed(() => tax.settings?.policy?.inventory?.negativeStockBlocked !== false);
 
 const isSubmitting = ref(false);
 
@@ -333,11 +346,22 @@ async function submit() {
     });
     return;
   }
+  if (!Number.isSafeInteger(qty)) {
+    await alertDialog({
+      title: language.isKhmer ? 'បរិមាណមិនត្រឹមត្រូវ' : 'Invalid quantity',
+      message: language.isKhmer
+        ? 'បរិមាណកែតម្រូវត្រូវតែជាចំនួនគត់។'
+        : 'Adjustment quantity must be a whole number.',
+      variant: 'danger',
+      confirmText: language.isKhmer ? 'យល់ព្រម' : 'OK',
+    });
+    return;
+  }
 
   const targetItem = selectedItem.value;
 
   // Validate to prevent unintended negative stock
-  if (targetItem && qty < 0 && (targetItem.qtyOnHand || 0) + qty < 0) {
+  if (negativeStockBlocked.value && targetItem && qty < 0 && (targetItem.qtyOnHand || 0) + qty < 0) {
     await alertDialog({
       title: language.isKhmer ? 'ស្តុកមិនគ្រប់គ្រាន់' : 'Insufficient stock',
       message: language.isKhmer

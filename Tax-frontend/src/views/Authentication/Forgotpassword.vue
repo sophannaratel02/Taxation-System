@@ -3,14 +3,14 @@
     <section class="recovery-card" aria-labelledby="recovery-title">
       <!-- Brand & Header -->
       <header class="brand-row">
-        <img :src="logoUrl" alt="Logo" class="logo" />
-        <span class="security-mark" title="Secured with OTP">
+        <img :src="logoUrl" :alt="text('Logo', 'ស្លាកសញ្ញា')" class="logo" />
+        <span class="security-mark" :title="text('Secured with OTP', 'បានការពារដោយ OTP')">
           <i class="bi bi-shield-lock-fill"></i>
         </span>
       </header>
 
       <!-- Stepper Indicator -->
-      <div class="stepper" aria-label="Password recovery progress">
+      <div class="stepper" :aria-label="text('Password recovery progress', 'ដំណើរការស្តារពាក្យសម្ងាត់')">
         <div
           v-for="item in steps"
           :key="item.number"
@@ -97,7 +97,7 @@
             maxlength="1"
             pattern="[0-9]"
             class="otp-box"
-            :aria-label="`OTP digit ${index + 1}`"
+            :aria-label="text(`OTP digit ${index + 1}`, `ខ្ទង់ OTP ${index + 1}`)"
             @input="handleOtpInput(index, $event)"
             @keydown.backspace="handleBackspace(index, $event)"
             @paste.prevent="handlePaste"
@@ -139,15 +139,16 @@
             id="newPassword"
             v-model="newPassword"
             :type="showPassword ? 'text' : 'password'"
-            minlength="6"
+            :minlength="passwordMinLength"
+            maxlength="128"
             autocomplete="new-password"
             required
-            :placeholder="text('At least 6 characters', 'យ៉ាងតិច ៦ តួអក្សរ')"
+            :placeholder="text(`At least ${passwordMinLength} characters`, `យ៉ាងតិច ${passwordMinLength} តួអក្សរ`)"
           />
           <button
             type="button"
             class="icon-button"
-            :aria-label="showPassword ? 'Hide password' : 'Show password'"
+            :aria-label="showPassword ? text('Hide password', 'លាក់ពាក្យសម្ងាត់') : text('Show password', 'បង្ហាញពាក្យសម្ងាត់')"
             @click="showPassword = !showPassword"
           >
             <i :class="showPassword ? 'bi bi-eye-slash' : 'bi bi-eye'"></i>
@@ -173,7 +174,8 @@
             id="confirmPassword"
             v-model="confirmPassword"
             :type="showPassword ? 'text' : 'password'"
-            minlength="6"
+            :minlength="passwordMinLength"
+            maxlength="128"
             autocomplete="new-password"
             required
             :placeholder="text('Re-enter new password', 'បញ្ចូលពាក្យសម្ងាត់ម្តងទៀត')"
@@ -182,7 +184,7 @@
 
         <button
           class="primary-button"
-          :disabled="loading || passwordScore < 2 || newPassword !== confirmPassword"
+          :disabled="loading || newPassword.length < passwordMinLength || newPassword !== confirmPassword"
           type="submit"
         >
           <span v-if="loading" class="spinner-border spinner-border-sm me-2" role="status"></span>
@@ -205,10 +207,10 @@
 </template>
 
 <script setup>
-import { computed, nextTick, onUnmounted, ref } from 'vue';
+import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { api } from '@/services/api';
-import { useLanguageStore } from '@/stores/language';
+import { useLanguageStore } from '../../stores/language.js';
 import logoUrl from '@/assets/logo.svg';
 
 const router = useRouter();
@@ -227,9 +229,11 @@ const loading = ref(false);
 const error = ref('');
 const success = ref('');
 const resendSeconds = ref(0);
+const passwordMinLength = ref(6);
 let resendTimer = null;
 
 const text = (english, khmer) => (language.isKhmer ? khmer : english);
+const userError = (error, english, khmer) => (language.isKhmer ? khmer : error?.response?.data?.message || error?.message || english);
 
 const steps = computed(() => [
   { number: 1, label: text('Request', 'ស្នើសុំ') },
@@ -283,6 +287,18 @@ const strengthLabel = computed(() => [
   text('Very strong', 'រឹងមាំខ្លាំង'),
 ][passwordScore.value]);
 
+onMounted(async () => {
+  try {
+    const policy = await api.registrationPolicy();
+    const minimum = Number(policy.passwordMinLength);
+    if (Number.isSafeInteger(minimum) && minimum >= 6 && minimum <= 128) {
+      passwordMinLength.value = minimum;
+    }
+  } catch (requestError) {
+    error.value = userError(requestError, 'Unable to load password requirements.', 'មិនអាចផ្ទុកលក្ខខណ្ឌពាក្យសម្ងាត់បានទេ។');
+  }
+});
+
 function clearFeedback() {
   error.value = '';
   success.value = '';
@@ -321,7 +337,7 @@ async function requestOtp() {
       otpRefs.value[0]?.focus();
     });
   } catch (requestError) {
-    error.value = requestError?.response?.data?.message || requestError.message || text('Failed to request OTP code.', 'មិនអាចផ្ញើលេខកូដផ្ទៀងផ្ទាត់បានទេ។');
+    error.value = userError(requestError, 'Failed to request OTP code.', 'មិនអាចផ្ញើលេខកូដផ្ទៀងផ្ទាត់បានទេ។');
   } finally {
     loading.value = false;
   }
@@ -382,10 +398,15 @@ async function verifyOtp() {
   try {
     const result = await api.verifyOtp(email.value, code);
     resetToken.value = result?.resetToken || '';
-    step.value = 3;
     success.value = text('Code verified successfully.', 'លេខកូដផ្ទៀងផ្ទាត់បានត្រឹមត្រូវ។');
+
+    await new Promise((resolve) => {
+      setTimeout(resolve, 2000);
+    });
+
+    step.value = 3;
   } catch (requestError) {
-    error.value = requestError?.response?.data?.message || requestError.message || text('Invalid or expired OTP code.', 'លេខកូដមិនត្រឹមត្រូវ ឬផុតកំណត់។');
+    error.value = userError(requestError, 'Invalid or expired OTP code.', 'លេខកូដមិនត្រឹមត្រូវ ឬផុតកំណត់។');
   } finally {
     loading.value = false;
   }
@@ -418,7 +439,7 @@ async function resetPassword() {
       router.push('/login');
     }, 1500);
   } catch (requestError) {
-    error.value = requestError?.response?.data?.message || requestError.message || text('Failed to reset password.', 'មិនអាចកំណត់ពាក្យសម្ងាត់ឡើងវិញបានទេ។');
+    error.value = userError(requestError, 'Failed to reset password.', 'មិនអាចកំណត់ពាក្យសម្ងាត់ឡើងវិញបានទេ។');
   } finally {
     loading.value = false;
   }

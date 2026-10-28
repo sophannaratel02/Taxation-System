@@ -33,7 +33,8 @@
           </label>
           <label class="form-field">
             <span>{{ text('បរិមាណ', 'Quantity') }}</span>
-            <input v-model.number="form.quantity" class="form-control" type="number" min="0" step="0.001" required :disabled="!isDraft" />
+            <input v-model.number="form.quantity" class="form-control" type="number" min="0" step="1" required :disabled="!isDraft" @input="quantityError = ''" />
+            <small v-if="quantityError" class="text-danger">{{ quantityError }}</small>
           </label>
           <label class="form-field">
             <span>{{ text('ការលក់មិនជាប់អាករ (USD)', 'Non-Taxable Sale (USD)') }}</span>
@@ -146,6 +147,7 @@
 
 <script setup>
 import { computed, reactive, ref } from 'vue';
+import { useLanguageStore } from '@/stores/language';
 
 const props = defineProps({
   records: { type: Array, default: () => [] },
@@ -158,7 +160,9 @@ const props = defineProps({
 });
 
 const emit = defineEmits(['save-record', 'delete-record']);
+const language = useLanguageStore();
 const editingId = ref(null);
+const quantityError = ref('');
 
 function initialForm() {
   return {
@@ -197,7 +201,7 @@ const totalKhr = computed(() => Math.round(nonTaxableUsd.value * exchangeRate.va
 const summaryTotalUsd = computed(() => records.value.reduce((sum, row) => sum + saleAmounts(row).totalUsd, 0));
 const summaryTotalKhr = computed(() => records.value.reduce((sum, row) => sum + saleAmounts(row).totalKhr, 0));
 
-function text(khmer, english) { return props.isKhmer ? khmer : english; }
+function text(khmer, english) { return props.isKhmer || language.isKhmer ? khmer : english; }
 function money(value) { return new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 }).format(Math.round(Number(value) || 0)); }
 function moneyUsd(value) { return new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number(value) || 0); }
 function roundMoney(value) { return Math.round((Number(value) + Number.EPSILON) * 100) / 100; }
@@ -283,6 +287,11 @@ function resetForm() {
 }
 
 function saveRecord() {
+  if (!Number.isSafeInteger(Number(form.quantity)) || Number(form.quantity) < 0) {
+    quantityError.value = text('បរិមាណត្រូវតែជាចំនួនគត់មិនអវិជ្ជមាន។', 'Quantity must be a non-negative whole number.');
+    return;
+  }
+  quantityError.value = '';
   syncCurrency();
   const baseKhr = Math.round(nonTaxableUsd.value * exchangeRate.value)
     + Math.round(exportUsd.value * exchangeRate.value)

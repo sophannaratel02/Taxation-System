@@ -9,7 +9,7 @@
             <i class="bi bi-wallet2"></i>
             <span>{{ language.t('customerSales') }}</span>
             <span class="text-muted">·</span>
-            <span>Accounts Receivable</span>
+            <span>{{ language.isKhmer ? 'គណនីត្រូវទារ' : 'Accounts Receivable' }}</span>
           </div>
           <h1 class="h3 fw-bold text-dark mb-1 tracking-tight">
             {{ language.isKhmer ? 'គណនីត្រូវទារ (Accounts Receivable)' : language.t('accountsReceivable') }}
@@ -39,7 +39,7 @@
     <div v-if="error" class="alert alert-danger alert-dismissible fade show d-flex align-items-center mb-4 rounded-3 shadow-sm" role="alert">
       <i class="bi bi-exclamation-triangle-fill me-2 fs-5"></i>
       <div>{{ error }}</div>
-      <button type="button" class="btn-close ms-auto" aria-label="Close" @click="error = ''"></button>
+      <button type="button" class="btn-close ms-auto" :aria-label="language.isKhmer ? 'បិទ' : 'Close'" @click="error = ''"></button>
     </div>
 
     <!-- Summary Metrics (Bento Grid) -->
@@ -89,7 +89,7 @@
             <input
               v-model.trim="search"
               class="form-control border-start-0 shadow-none"
-              :placeholder="language.isKhmer ? 'ស្វែងរកអតិថិជន, លេខវិក្កយបត្រ...' : 'Search customer or invoice...'"
+              :placeholder="language.isKhmer ? 'ស្វែងរកព័ត៌មានអតិថិជន និងវិក្កយបត្រ...' : 'Search customer, invoice, dates, amounts, status...'"
             />
             <button v-if="search" class="btn btn-outline-secondary border-start-0 border-end" type="button" @click="search = ''">
               <i class="bi bi-x"></i>
@@ -124,7 +124,7 @@
                     {{ getInitials(row.customer) }}
                   </div>
                   <div>
-                    <span class="fw-bold text-dark d-block">{{ row.customer || 'Walk-in Customer' }}</span>
+                    <span class="fw-bold text-dark d-block">{{ row.customer || (language.isKhmer ? 'អតិថិជនដើរចូល' : 'Walk-in Customer') }}</span>
                     <small class="text-muted font-monospace">ID: #{{ row.customerId || 'N/A' }}</small>
                   </div>
                 </div>
@@ -297,6 +297,7 @@ import { computed, onMounted, ref } from 'vue';
 import { api } from '@/services/api';
 import { useLanguageStore } from '@/stores/language';
 import { useTaxStore } from '@/stores/tax';
+import { matchesSearch } from '@/utils/search';
 
 const language = useLanguageStore();
 const tax = useTaxStore();
@@ -394,12 +395,7 @@ async function collectPayment() {
 
 const filteredRecords = computed(() => {
   if (!search.value) return records.value;
-  const q = search.value.toLowerCase();
-  return records.value.filter(
-    (r) =>
-      (r.customer || '').toLowerCase().includes(q) ||
-      String(r.invoice || r.invoiceId || '').toLowerCase().includes(q)
-  );
+  return records.value.filter((record) => matchesSearch(search.value, record));
 });
 
 const totalOutstanding = computed(() =>

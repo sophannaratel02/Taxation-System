@@ -173,7 +173,7 @@ function formatDate(value) {
 async function exportTaxBook(kind) {
   if (dateError.value) return;
   const response = await fetch(api.taxExportUrl(kind, fromDate.value, toDate.value), { headers: { Authorization: `Bearer ${localStorage.getItem('tax_token') || ''}` } });
-  if (!response.ok) throw new Error('Tax export failed');
+  if (!response.ok) throw new Error(language.isKhmer ? 'ការនាំចេញរបាយការណ៍ពន្ធបានបរាជ័យ។' : 'Tax export failed');
   const blob = await response.blob();
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');

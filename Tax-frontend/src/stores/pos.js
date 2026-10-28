@@ -42,5 +42,13 @@ export const usePosStore = defineStore('pos', () => {
     amountTenderedKHR.value = 0;
   }
 
-  return { cart, exchangeRate, paymentMethod, amountTenderedUSD, amountTenderedKHR, netSale, totalVat, grandTotal, grandTotalKHR, changeDueUSD, addToCart, removeItem, clearCart };
+  function reset() {
+    cart.value = [];
+    exchangeRate.value = 4000;
+    paymentMethod.value = 'cash';
+    amountTenderedUSD.value = 0;
+    amountTenderedKHR.value = 0;
+  }
+
+  return { cart, exchangeRate, paymentMethod, amountTenderedUSD, amountTenderedKHR, netSale, totalVat, grandTotal, grandTotalKHR, changeDueUSD, addToCart, removeItem, clearCart, reset };
 });

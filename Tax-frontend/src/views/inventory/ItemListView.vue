@@ -9,9 +9,9 @@
           {{ language.t('manageProducts') }}
         </p>
       </div>
-      <router-link to="/inventory/items/new" class="btn btn-primary">
+      <button type="button" class="btn btn-primary" @click="openItemForm()">
         <i class="bi bi-plus-lg me-2"></i>{{ language.t('newItem') }}
-      </router-link>
+      </button>
     </div>
 
     <!-- Summary Metrics -->
@@ -91,7 +91,7 @@
                   {{ item.nameKh || '—' }} · {{ item.barcode }}
                 </small>
               </td>
-              <td>{{ item.category || 'General' }}</td>
+              <td>{{ item.category || (language.isKhmer ? 'ទូទៅ' : 'General') }}</td>
               <td>
                 <template v-if="item.units?.length">
                   <span
@@ -99,23 +99,28 @@
                     :key="unit.name"
                     class="badge text-bg-light border me-1"
                   >
-                    {{ unit.name }} ×{{ unit.ratio }}
+                    {{ unit.name }} ×{{ unit.ratio }} · ${{ formatPrice(unit.retailPrice) }}
                   </span>
                 </template>
                 <span v-else class="badge text-bg-light border">
-                  {{ item.baseUnit || 'Unit' }}
+                  {{ item.baseUnit || (language.isKhmer ? 'ឯកតា' : 'Unit') }}
                 </span>
               </td>
               <td class="text-end fw-semibold">{{ item.qtyOnHand ?? 0 }}</td>
               <td class="text-end">${{ formatCurrency(item.averageCost ?? item.purchaseCost) }}</td>
-              <td class="text-end">${{ formatCurrency(item.retailPrice) }}</td>
+              <td class="text-end">
+                ${{ formatPrice(item.retailPrice) }}
+                <small class="d-block text-muted">
+                  ${{ formatPrice(item.markupAmount) }} {{ language.isKhmer ? 'ប្រាក់បន្ថែម' : 'markup / unit' }}
+                </small>
+              </td>
               <td>
                 <span :class="['badge', getStatusBadge(item).class]">
                   {{ getStatusBadge(item).text }}
                 </span>
               </td>
               <td class="text-end text-nowrap">
-                <router-link :to="`/inventory/items/${item.id}/edit`" class="btn btn-sm btn-outline-primary me-1" :title="language.isKhmer ? 'កែប្រែ' : 'Edit'"><i class="bi bi-pencil"></i></router-link>
+                <button type="button" class="btn btn-sm btn-outline-primary me-1" :title="language.isKhmer ? 'កែប្រែ' : 'Edit'" @click="openItemForm(item.id)"><i class="bi bi-pencil"></i></button>
                 <button class="btn btn-sm btn-outline-danger" type="button" :title="language.isKhmer ? 'លុប' : 'Delete'" @click="deleteItem(item)"><i class="bi bi-trash"></i></button>
               </td>
             </tr>
@@ -131,20 +136,32 @@
         </table>
       </div>
     </div>
+    <ItemFormView
+      v-if="itemFormOpen"
+      :key="itemFormId || 'new-item'"
+      :modal="true"
+      :item-id="itemFormId"
+      @close="itemFormOpen = false"
+      @saved="onItemSaved"
+    />
   </section>
 </template>
 
 <script setup>
 import { computed, ref } from 'vue';
+import ItemFormView from './ItemFormView.vue';
 import { useTaxStore } from '@/stores/tax';
 import { useLanguageStore } from '@/stores/language';
 import { alertDialog, confirmDialog } from '@/utils/dialog';
+import { matchesSearch } from '@/utils/search';
 
 const tax = useTaxStore();
 const language = useLanguageStore();
 
 const query = ref('');
 const category = ref('');
+const itemFormOpen = ref(false);
+const itemFormId = ref(null);
 
 const categories = computed(() => {
   const items = tax.items || [];
@@ -153,15 +170,11 @@ const categories = computed(() => {
 
 const filteredItems = computed(() => {
   const items = tax.items || [];
-  const q = query.value.toLowerCase().trim();
 
   return items.filter((item) => {
     const matchesCategory = !category.value || item.category === category.value;
     if (!matchesCategory) return false;
-    if (!q) return true;
-
-    const searchable = `${item.nameEn || ''} ${item.nameKh || ''} ${item.barcode || ''} ${item.category || ''}`.toLowerCase();
-    return searchable.includes(q);
+    return matchesSearch(query.value, item);
   });
 });
 
@@ -172,15 +185,28 @@ const stats = computed(() => {
   const inventoryValue = tax.inventoryValue ?? 0;
 
   return [
-    { label: 'Total items', value: items.length },
-    { label: 'Low stock', value: lowStock.length },
-    { label: 'Out of stock', value: outOfStock.length },
-    { label: 'Stock value', value: `$${formatCurrency(inventoryValue)}` }
+    { label: language.isKhmer ? 'ចំនួនទំនិញសរុប' : 'Total items', value: items.length },
+    { label: language.isKhmer ? 'ស្តុកទាប' : 'Low stock', value: lowStock.length },
+    { label: language.isKhmer ? 'អស់ពីស្តុក' : 'Out of stock', value: outOfStock.length },
+    { label: language.isKhmer ? 'តម្លៃស្តុក' : 'Stock value', value: `$${formatCurrency(inventoryValue)}` }
   ];
 });
 
 function formatCurrency(val) {
   return Number(val || 0).toFixed(2);
+}
+
+function formatPrice(val) {
+  return Number(val || 0).toFixed(2);
+}
+
+function openItemForm(itemId = null) {
+  itemFormId.value = itemId;
+  itemFormOpen.value = true;
+}
+
+function onItemSaved() {
+  itemFormOpen.value = false;
 }
 
 function getStatusBadge(item) {
@@ -211,9 +237,9 @@ async function deleteItem(item) {
   } catch (error) {
     await alertDialog({
       title: language.isKhmer ? 'លុបបរាជ័យ' : 'Delete failed',
-      message: error.message || 'Unable to delete item.',
+      message: error.message || (language.isKhmer ? 'មិនអាចលុបទំនិញបានទេ។' : 'Unable to delete item.'),
       variant: 'danger',
-      confirmText: 'OK',
+      confirmText: language.isKhmer ? 'យល់ព្រម' : 'OK',
     });
   }
 }

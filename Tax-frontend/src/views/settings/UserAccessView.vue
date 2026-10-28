@@ -36,11 +36,11 @@
         <i class="bi bi-exclamation-triangle-fill fs-5 flex-shrink-0"></i>
         <div>{{ error }}</div>
       </div>
-      <button type="button" class="btn-close" @click="error = ''" aria-label="Close"></button>
+      <button type="button" class="btn-close" @click="error = ''" :aria-label="language.isKhmer ? 'បិទ' : 'Close'"></button>
     </div>
     <div v-if="successMessage" class="alert alert-success alert-dismissible fade show border-0 shadow-sm rounded-3 mb-4" role="status">
       <div class="d-flex align-items-center gap-2"><i class="bi bi-check-circle-fill fs-5"></i><div>{{ successMessage }}</div></div>
-      <button type="button" class="btn-close" @click="successMessage = ''" aria-label="Close"></button>
+      <button type="button" class="btn-close" @click="successMessage = ''" :aria-label="language.isKhmer ? 'បិទ' : 'Close'"></button>
     </div>
 
     <!-- Security & Metrics Overview -->
@@ -74,7 +74,7 @@
             }}
           </strong>
         </div>
-        <button type="button" class="btn-close" aria-label="Close" @click="closeForm"></button>
+        <button type="button" class="btn-close" :aria-label="language.isKhmer ? 'បិទ' : 'Close'" @click="closeForm"></button>
       </div>
 
       <form class="row g-3" @submit.prevent="saveUser">
@@ -85,7 +85,7 @@
           <input
             v-model.trim="userForm.name"
             class="form-control form-control-md"
-            placeholder="e.g. Sok Dara"
+            :placeholder="language.isKhmer ? 'ឧ. Sok Dara' : 'e.g. Sok Dara'"
             required
           />
         </div>
@@ -97,7 +97,7 @@
           <input
             v-model.trim="userForm.username"
             class="form-control form-control-md"
-            placeholder="e.g. dara.pos"
+            :placeholder="language.isKhmer ? 'ឧ. dara.pos' : 'e.g. dara.pos'"
             minlength="3"
             required
             :disabled="isEditing"
@@ -123,7 +123,7 @@
             v-model="userForm.password"
             type="password"
             class="form-control form-control-md"
-            :placeholder="isEditing ? '••••••••' : 'Min. 6 characters'"
+            :placeholder="isEditing ? '••••••••' : (language.isKhmer ? 'យ៉ាងតិច ៦ តួអក្សរ' : 'Min. 6 characters')"
             :minlength="isEditing ? 0 : 6"
             :required="!isEditing"
           />
@@ -133,10 +133,38 @@
           <label class="form-label fw-semibold small text-secondary">
             {{ language.isKhmer ? 'តួនាទី' : 'Role' }} <span class="text-danger">*</span>
           </label>
-          <select v-model="userForm.role" class="form-select form-select-md">
-            <option value="user">{{ language.t('staffUser') }}</option>
-            <option value="admin">{{ language.t('administrator') }}</option>
+          <select v-model="userForm.preset" class="form-select form-select-md" @change="applyPreset">
+            <option v-for="preset in availablePresets" :key="preset" :value="preset">{{ presetLabel(preset) }}</option>
           </select>
+          <small class="text-muted">{{ language.isKhmer ? 'កំណត់សិទ្ធិការងាររបស់បុគ្គលិក។' : 'Choose a business preset, then fine-tune its permissions below.' }}</small>
+        </div>
+
+        <div class="col-md-6">
+          <label class="form-label fw-semibold small text-secondary">
+            {{ language.isKhmer ? 'សាខាដែលអនុញ្ញាត' : 'Authorized branches' }}
+            <span class="text-danger">*</span>
+          </label>
+          <input
+            v-model.trim="userForm.branches"
+            class="form-control"
+            :placeholder="language.isKhmer ? 'ឧ. Head Quarter, Branch 1' : 'e.g. Head Quarter, Branch 1'"
+            required
+          />
+          <small class="text-muted">{{ language.isKhmer ? 'បំបែកឈ្មោះសាខាដោយសញ្ញាក្បៀស។' : 'Separate authorized branch names with commas.' }}</small>
+        </div>
+
+        <div class="col-12">
+          <fieldset class="border rounded-3 p-3">
+            <legend class="float-none w-auto px-2 fs-6 fw-semibold">{{ language.isKhmer ? 'សិទ្ធិលម្អិត' : 'Fine-grained permissions' }}</legend>
+            <div class="row g-2">
+              <div v-for="permission in availablePermissions" :key="permission.key" class="col-12 col-md-6 col-xl-4">
+                <label class="form-check">
+                  <input v-model="userForm.permissions" class="form-check-input" type="checkbox" :value="permission.key" />
+                  <span class="form-check-label">{{ language.isKhmer ? permission.label.km : permission.label.en }}</span>
+                </label>
+              </div>
+            </div>
+          </fieldset>
         </div>
 
         <div class="col-12 d-flex justify-content-end gap-2 pt-2">
@@ -176,9 +204,8 @@
           </div>
 
           <select v-model="roleFilter" class="form-select form-select-sm user-filter bg-light">
-            <option value="">{{ language.isKhmer ? 'តួនាទីទាំងអស់' : 'All roles' }}</option>
-            <option value="admin">{{ language.t('administrator') }}</option>
-            <option value="user">{{ language.t('staffUser') }}</option>
+            <option value="">{{ language.isKhmer ? 'សិទ្ធិទាំងអស់' : 'All permission presets' }}</option>
+            <option v-for="preset in availablePresets" :key="preset" :value="preset">{{ presetLabel(preset) }}</option>
           </select>
 
           <span class="badge bg-light text-secondary border px-2 py-2 text-nowrap rounded-2">
@@ -194,6 +221,7 @@
               <th class="ps-4">{{ language.isKhmer ? 'ឈ្មោះអ្នកប្រើប្រាស់' : 'User' }}</th>
               <th>{{ language.isKhmer ? 'ឈ្មោះគណនី' : 'Username' }}</th>
               <th>{{ language.isKhmer ? 'តួនាទី' : 'Role' }}</th>
+              <th>{{ language.isKhmer ? 'សាខា' : 'Branches' }}</th>
               <th>{{ language.t('status') }}</th>
               <th class="text-end pe-4">{{ language.isKhmer ? 'សកម្មភាព' : 'Actions' }}</th>
             </tr>
@@ -217,11 +245,14 @@
               <td>
                 <span
                   class="badge border text-capitalize px-2.5 py-1.5 rounded-2"
-                  :class="user.role === 'admin' ? 'bg-primary-subtle text-primary border-primary-subtle' : 'bg-light text-secondary'"
+                  :class="user.role === 'staff' ? 'bg-primary-subtle text-primary border-primary-subtle' : 'bg-light text-secondary'"
                 >
-                  <i :class="user.role === 'admin' ? 'bi bi-shield-lock me-1' : 'bi bi-person me-1'"></i>
-                  {{ formatRole(user.role) }}
+                  <i class="bi bi-person-gear me-1"></i>
+                  {{ presetLabel(user.permissions?.preset || user.permissions?.role || 'cashier') }}
                 </span>
+              </td>
+              <td class="small text-secondary">
+                {{ (user.branches || []).join(', ') || (language.isKhmer ? 'គ្មានសាខា' : 'No branches assigned') }}
               </td>
               <td>
                 <span
@@ -295,6 +326,8 @@ import { computed, nextTick, onMounted, reactive, ref } from 'vue';
 import { api } from '@/services/api';
 import { useLanguageStore } from '@/stores/language';
 import { alertDialog, confirmDialog } from '@/utils/dialog';
+import { permissionLabels, staffPermissions, staffPresets } from '@/router/permissionAccess';
+import { matchesSearch } from '@/utils/search';
 
 const language = useLanguageStore();
 
@@ -314,7 +347,9 @@ const userForm = reactive({
   username: '',
   email: '',
   password: '',
-  role: 'user'
+  preset: 'cashier',
+  permissions: [...staffPresets.cashier],
+  branches: '',
 });
 
 function getCurrentUser() {
@@ -322,24 +357,50 @@ function getCurrentUser() {
 }
 
 const currentUser = getCurrentUser();
+const availablePresets = [...Object.keys(staffPresets), 'custom'];
+const availablePermissions = staffPermissions.map((key) => ({ key, label: permissionLabels[key] }));
 
 const filteredUsers = computed(() => users.value.filter((user) => {
-  const query = search.value.toLowerCase();
-  const matchesSearch = !query || `${user.name} ${user.username}`.toLowerCase().includes(query);
-  return matchesSearch && (!roleFilter.value || user.role === roleFilter.value);
+  const matchesUserSearch = matchesSearch(search.value, user);
+  const permissions = normalizeUserPermissions(user.permissions);
+  const matchesRole = !roleFilter.value
+    || permissions.preset === roleFilter.value;
+  return matchesUserSearch && matchesRole;
 }));
 
 const securityStats = computed(() => [
   { label: language.isKhmer ? 'គណនីសកម្ម' : 'Active accounts', value: users.value.filter((u) => u.active).length, icon: 'bi bi-shield-check', tone: 'security-good' },
-  { label: language.isKhmer ? 'អ្នកគ្រប់គ្រង' : 'Administrators', value: users.value.filter((u) => u.role === 'admin' && u.active).length, icon: 'bi bi-person-lock', tone: 'security-primary' },
+  { label: language.isKhmer ? 'អ្នកគ្រប់គ្រង' : 'Managers', value: users.value.filter((u) => normalizeUserPermissions(u.permissions).preset === 'manager' && u.active).length, icon: 'bi bi-person-lock', tone: 'security-primary' },
   { label: language.isKhmer ? 'គណនីអសកម្ម' : 'Inactive accounts', value: users.value.filter((u) => !u.active).length, icon: 'bi bi-person-slash', tone: 'security-muted' },
   { label: language.isKhmer ? 'គោលការណ៍សិទ្ធិ' : 'Access Policy', value: 'RBAC', icon: 'bi bi-fingerprint', tone: 'security-warning' },
 ]);
 
-function formatRole(role) {
-  if (role === 'admin') return language.t('administrator');
-  if (role === 'user') return language.t('staffUser');
-  return role;
+function normalizeUserPermissions(value) {
+  const permissions = typeof value === 'string' ? JSON.parse(value) : value;
+  if (Array.isArray(permissions)) return { preset: 'custom', grants: permissions };
+  if (permissions && typeof permissions === 'object') {
+    const preset = Object.hasOwn(staffPresets, permissions.preset) ? permissions.preset : 'custom';
+    return {
+      preset,
+      grants: Array.isArray(permissions.grants) ? permissions.grants : [...(staffPresets[preset] || [])],
+    };
+  }
+  return { preset: 'cashier', grants: [...staffPresets.cashier] };
+}
+
+function presetLabel(preset) {
+  const labels = {
+    manager: language.isKhmer ? 'អ្នកគ្រប់គ្រងប្រតិបត្តិការ' : 'Manager',
+    cashier: language.isKhmer ? 'អ្នកគិតលុយ' : 'Cashier',
+    inventory: language.isKhmer ? 'ស្តុក' : 'Inventory',
+    accountant: language.isKhmer ? 'គណនេយ្យ' : 'Accountant',
+    custom: language.isKhmer ? 'កំណត់ផ្ទាល់ខ្លួន' : 'Custom',
+  };
+  return labels[preset] || preset;
+}
+
+function applyPreset() {
+  userForm.permissions = [...(staffPresets[userForm.preset] || [])];
 }
 
 function getInitials(name) {
@@ -348,13 +409,21 @@ function getInitials(name) {
 }
 
 function getUserAvatarClass(role) {
-  return role === 'admin' ? 'bg-primary text-white' : 'bg-light text-secondary border';
+  return ['owner', 'superadmin'].includes(role) ? 'bg-primary text-white' : 'bg-light text-secondary border';
 }
 
 function openCreateModal() {
   isEditing.value = false;
   editingUserId.value = null;
-  Object.assign(userForm, { name: '', username: '', email: '', password: '', role: 'user' });
+  Object.assign(userForm, {
+    name: '',
+    username: '',
+    email: '',
+    password: '',
+    preset: 'cashier',
+    permissions: [...staffPresets.cashier],
+    branches: '',
+  });
   showForm.value = true;
   error.value = '';
   successMessage.value = '';
@@ -363,7 +432,16 @@ function openCreateModal() {
 async function openEditModal(user) {
   isEditing.value = true;
   editingUserId.value = user.id;
-  Object.assign(userForm, { name: user.name, username: user.username, email: user.email || '', password: '', role: user.role });
+  const permissions = normalizeUserPermissions(user.permissions);
+  Object.assign(userForm, {
+    name: user.name,
+    username: user.username,
+    email: user.email || '',
+    password: '',
+    preset: permissions.preset,
+    permissions: [...permissions.grants],
+    branches: (user.branches || []).join(', '),
+  });
   showForm.value = true;
   error.value = '';
   await nextTick();
@@ -392,17 +470,37 @@ async function saveUser() {
 
   try {
     if (isEditing.value) {
-      const payload = { name: userForm.name, email: userForm.email, role: userForm.role };
+      const payload = {
+        name: userForm.name,
+        email: userForm.email,
+        role: 'staff',
+        preset: userForm.preset,
+        permissions: { preset: userForm.preset, grants: [...userForm.permissions] },
+        branches: userForm.branches,
+      };
       if (userForm.password) payload.password = userForm.password;
 
       const updated = await api.updateAdminUser(editingUserId.value, payload);
       const index = users.value.findIndex(u => u.id === editingUserId.value);
       if (index !== -1) {
-        users.value[index] = { ...users.value[index], ...(updated.user || updated), name: userForm.name, email: userForm.email, role: userForm.role };
+        users.value[index] = {
+          ...users.value[index],
+          ...(updated.user || updated),
+          name: userForm.name,
+          email: userForm.email,
+          role: 'staff',
+          permissions: payload.permissions,
+          branches: userForm.branches.split(',').map((branch) => branch.trim()).filter(Boolean),
+        };
       }
       successMessage.value = language.isKhmer ? 'បានកែប្រែអ្នកប្រើប្រាស់ដោយជោគជ័យ។' : 'User updated successfully.';
     } else {
-      const created = await api.saveUser(userForm);
+      const created = await api.saveUser({
+        ...userForm,
+        role: 'staff',
+        permissions: { preset: userForm.preset, grants: [...userForm.permissions] },
+        branches: userForm.branches,
+      });
       users.value.push(created);
       successMessage.value = language.isKhmer ? 'បានបង្កើតអ្នកប្រើប្រាស់ដោយជោគជ័យ។' : 'User created successfully.';
     }
@@ -449,8 +547,8 @@ async function removeUser(user) {
   if (isCurrentUser(user)) return;
 
   const confirmText = language.isKhmer
-    ? `តើអ្នកប្រាកដថាចង់លុបអ្នកប្រើប្រាស់ "${user.name}" មែនទេ?`
-    : `Are you sure you want to delete "${user.name}"?`;
+    ? `តើអ្នកប្រាកដថាចង់លុបអ្នកប្រើប្រាស់ "${user.name}" មែនទេ? ប្រវត្តិប្រតិបត្តិការនឹងត្រូវបានរក្សាទុក ប៉ុន្តែឈ្មោះអ្នកប្រើនឹងត្រូវដកចេញ។`
+    : `Permanently delete "${user.name}"? Financial and audit history will be retained, but the user attribution will be removed.`;
 
   const confirmed = await confirmDialog({
     title: language.isKhmer ? 'លុបអ្នកប្រើប្រាស់' : 'Delete user',
@@ -465,23 +563,16 @@ async function removeUser(user) {
 
   try {
     const result = await api.deleteAdminUser(user.id);
-    if (result.deactivated) {
-      user.active = false;
-      await alertDialog({
-        title: language.isKhmer ? 'បានផ្អាកគណនី' : 'Account deactivated',
-        message: language.isKhmer
-          ? 'អ្នកប្រើប្រាស់មានប្រវត្តិដែលត្រូវរក្សាទុក ដូច្នេះគណនីត្រូវបានផ្អាក។'
-          : 'This user has linked history, so the account was deactivated instead.',
-        variant: 'success',
-      });
-    } else {
-      users.value = users.value.filter((item) => item.id !== user.id);
-      await alertDialog({
-        title: language.isKhmer ? 'បានលុបអ្នកប្រើប្រាស់' : 'User deleted',
-        message: language.isKhmer ? 'បានលុបអ្នកប្រើប្រាស់ដោយជោគជ័យ។' : 'User deleted successfully.',
-        variant: 'success',
-      });
-    }
+    users.value = users.value.filter((item) => item.id !== user.id);
+    await alertDialog({
+      title: language.isKhmer ? 'បានលុបអ្នកប្រើប្រាស់' : 'User deleted',
+      message: result.historicalRecordsPreserved
+        ? (language.isKhmer
+          ? 'បានលុបអ្នកប្រើប្រាស់។ ប្រវត្តិប្រតិបត្តិការ និងសវនកម្មត្រូវបានរក្សាទុក។'
+          : 'User deleted. Financial and audit history has been retained.')
+        : (language.isKhmer ? 'បានលុបអ្នកប្រើប្រាស់ដោយជោគជ័យ។' : 'User deleted successfully.'),
+      variant: 'success',
+    });
   } catch (requestError) {
     error.value = requestError.message || (
       language.isKhmer ? 'មិនអាចលុបអ្នកប្រើប្រាស់បានទេ។' : 'Failed to delete user.'

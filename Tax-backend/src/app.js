@@ -3,8 +3,16 @@ const cors = require('cors');
 const { isProduction } = require('./config/runtime');
 const apiRoutes = require('./routes/api');
 const errorHandler = require('./middleware/errorHandler');
+const { authRateLimiters } = require('./middleware/authRateLimit');
 
 const app = express();
+if (process.env.TRUST_PROXY_HOPS !== undefined) {
+  const trustProxyHops = Number(process.env.TRUST_PROXY_HOPS);
+  if (!Number.isSafeInteger(trustProxyHops) || trustProxyHops < 0) {
+    throw new Error('TRUST_PROXY_HOPS must be a non-negative integer.');
+  }
+  app.set('trust proxy', trustProxyHops);
+}
 const configuredOrigins = (process.env.CORS_ORIGIN || '')
   .split(',')
   .map((origin) => origin.trim())
@@ -33,6 +41,10 @@ app.use(cors({
   },
   credentials: true,
 }));
+app.use('/api/auth/login', authRateLimiters.loginIp);
+app.use('/api/auth/forgot-password', authRateLimiters.forgotPasswordIp);
+app.use('/api/auth/verify-otp', authRateLimiters.verifyOtpIp);
+app.use('/api/auth/reset-password', authRateLimiters.resetPasswordIp);
 app.use(express.json());
 app.use('/api', apiRoutes);
 

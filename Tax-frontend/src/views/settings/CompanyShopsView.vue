@@ -71,7 +71,7 @@
                     <input
                       v-model.trim="form.companyName"
                       class="form-control border-start-0"
-                      placeholder="e.g. POS Mart Retail Co., Ltd."
+                      :placeholder="language.isKhmer ? 'ឧ. POS Mart Retail Co., Ltd.' : 'e.g. POS Mart Retail Co., Ltd.'"
                       required
                     />
                   </div>
@@ -102,7 +102,7 @@
                     <input
                       v-model.trim="form.vatTin"
                       class="form-control border-start-0 font-monospace text-uppercase"
-                      placeholder="K001-123456789"
+                      :placeholder="language.isKhmer ? 'ឧ. K001-123456789' : 'K001-123456789'"
                     />
                   </div>
                 </div>
@@ -132,7 +132,7 @@
                     <input
                       v-model.trim="form.address"
                       class="form-control border-start-0"
-                      placeholder="e.g. #123, St. 271, Phnom Penh, Cambodia"
+                      :placeholder="language.isKhmer ? 'ឧ. #123, ផ្លូវ ២៧១, ភ្នំពេញ, កម្ពុជា' : 'e.g. #123, St. 271, Phnom Penh, Cambodia'"
                     />
                   </div>
                 </div>
@@ -161,12 +161,15 @@
                   <label class="form-label small fw-semibold text-secondary">
                     {{ language.isKhmer ? 'សាខា ឬឃ្លាំងដែលកំពុងដំណើរការ' : 'Active Operating Branch' }}
                   </label>
-                  <select v-model="form.branch" class="form-select form-select-lg fs-6">
-                    
-                    <option value="Downtown Shop">Downtown Shop (សាខាកណ្តាលក្រុង)</option>
-                    <option value="#32 street 432, Toul Tum Poung 1">#32 street 432, Toul Tum Poung 1, Chamkar Morn, Phnom Penh, Cambodia</option>
-                
-                  </select>
+                  <input
+                    v-model.trim="form.branch"
+                    class="form-control form-control-lg fs-6"
+                    type="text"
+                    maxlength="120"
+                    autocomplete="off"
+                    :placeholder="language.isKhmer ? 'ឧ. សាខាភ្នំពេញ' : 'e.g. Phnom Penh Branch'"
+                    required
+                  />
                 </div>
 
                 <!-- Base Currency -->
@@ -175,7 +178,7 @@
                     {{ language.isKhmer ? 'រូបិយប័ណ្ណគោល' : 'Base Currency' }}
                   </label>
                   <input v-model="form.baseCurrency" class="form-control bg-light" readonly />
-                  <div class="form-text small text-muted">Fixed store base</div>
+                  <div class="form-text small text-muted">{{ language.isKhmer ? 'រូបិយប័ណ្ណមូលដ្ឋានថេររបស់ហាង' : 'Fixed store base' }}</div>
                 </div>
 
                 <!-- KHR Exchange Rate -->
@@ -194,7 +197,7 @@
                       required
                     />
                   </div>
-                  <div class="form-text small text-muted">Per 1.00 USD</div>
+                  <div class="form-text small text-muted">{{ language.isKhmer ? 'ក្នុងមួយ 1.00 ដុល្លារ' : 'Per 1.00 USD' }}</div>
                 </div>
 
                 <!-- VAT Rate -->
@@ -214,7 +217,7 @@
                     />
                     <span class="input-group-text bg-light text-danger fw-bold">%</span>
                   </div>
-                  <div class="form-text small text-muted">GDT standard</div>
+                  <div class="form-text small text-muted">{{ language.isKhmer ? 'តាមស្តង់ដារអគ្គនាយកដ្ឋានពន្ធដារ' : 'GDT standard' }}</div>
                 </div>
 
                 <!-- Live Exchange Calculation Box -->
@@ -247,7 +250,7 @@
                   <small class="text-muted">{{ language.isKhmer ? 'បង្កើត QR ស្កេនទូទាត់សម្រាប់ ABA, ACLEDA, Wing' : 'EMVCo compliant mobile payment configuration' }}</small>
                 </div>
               </div>
-              <span class="badge bg-danger px-3 py-2 text-uppercase fw-bold letter-spacing">KHQR Official</span>
+              <span class="badge bg-danger px-3 py-2 text-uppercase fw-bold letter-spacing">{{ language.isKhmer ? 'KHQR ផ្លូវការ' : 'KHQR Official' }}</span>
             </div>
 
             <div class="card-body p-4">
@@ -258,11 +261,11 @@
                     {{ language.isKhmer ? 'ធនាគារ / អ្នកផ្តល់សេវា' : 'Bank / Provider' }}
                   </label>
                   <select v-model="form.khqrProvider" class="form-select">
-                    <option value="abaa">ABA Bank (@abaa)</option>
-                    <option value="aclb">ACLEDA Bank (@aclb)</option>
-                    <option value="wing">Wing Bank (@wing)</option>
-                    <option value="spbn">Sathapana Bank (@spbn)</option>
-                    <option value="bakong">Bakong Native Account (@bakong)</option>
+                    <option value="abaa">{{ language.isKhmer ? 'ធនាគារ ABA (@abaa)' : 'ABA Bank (@abaa)' }}</option>
+                    <option value="aclb">{{ language.isKhmer ? 'ធនាគារ ACLEDA (@aclb)' : 'ACLEDA Bank (@aclb)' }}</option>
+                    <option value="wing">{{ language.isKhmer ? 'ធនាគារ Wing (@wing)' : 'Wing Bank (@wing)' }}</option>
+                    <option value="spbn">{{ language.isKhmer ? 'ធនាគារ Sathapana (@spbn)' : 'Sathapana Bank (@spbn)' }}</option>
+                    <option value="bakong">{{ language.isKhmer ? 'គណនី Bakong ផ្ទាល់ (@bakong)' : 'Bakong Native Account (@bakong)' }}</option>
                   </select>
                 </div>
 
@@ -274,7 +277,7 @@
                   <input
                     v-model.trim="form.khqrAccount"
                     class="form-control font-monospace"
-                    placeholder="e.g. merchant@abaa or merchant@aclb"
+                    :placeholder="language.isKhmer ? 'ឧ. merchant@abaa ឬ merchant@aclb' : 'e.g. merchant@abaa or merchant@aclb'"
                     required
                   />
                 </div>
@@ -287,7 +290,7 @@
                   <input
                     v-model.trim="form.khqrMerchantName"
                     class="form-control text-uppercase fw-semibold"
-                    placeholder="e.g. HAPPY BABE SHOP"
+                    :placeholder="language.isKhmer ? 'ឧ. HAPPY BABE SHOP' : 'e.g. HAPPY BABE SHOP'"
                     required
                   />
                   <small class="form-text text-muted">
@@ -303,9 +306,9 @@
                   <input
                     v-model.trim="form.khqrMerchantId"
                     class="form-control font-monospace"
-                    placeholder="16-character Merchant Code"
+                    :placeholder="language.isKhmer ? 'លេខកូដពាណិជ្ជករ ១៦ តួអក្សរ' : '16-character Merchant Code'"
                   />
-                  <small class="form-text text-muted">The Bakong Account ID above is required for cross-bank scanning.</small>
+                  <small class="form-text text-muted">{{ language.isKhmer ? 'ត្រូវការលេខសម្គាល់គណនី Bakong ខាងលើ ដើម្បីស្កេនទូទាត់ឆ្លងធនាគារ។' : 'The Bakong Account ID above is required for cross-bank scanning.' }}</small>
                 </div>
 
                 <!-- Live Configuration Badge -->
@@ -460,6 +463,14 @@ function optionLabel(opt) {
 }
 
 async function save() {
+  const branch = String(form.branch || '').trim();
+  if (!branch || branch.length > 120) {
+    saveError.value = language.isKhmer
+      ? 'សូមបញ្ចូលឈ្មោះសាខាប្រតិបត្តិការដែលមានប្រវែងពី ១ ដល់ ១២០ តួអក្សរ។'
+      : 'Enter an operating branch name between 1 and 120 characters.';
+    saved.value = false;
+    return;
+  }
   const receiptConfig = receiptOptions.reduce((acc, opt) => {
     acc[opt.key] = opt.enabled;
     return acc;
@@ -467,6 +478,7 @@ async function save() {
 
   const payload = {
     ...form,
+    branch,
     khqrMerchantName: String(form.khqrMerchantName || '').trim().toUpperCase(),
     khqrAccount: String(form.khqrAccount || '').trim().replace(/\s+/g, ''),
     receiptOptions: receiptConfig
@@ -486,7 +498,7 @@ async function save() {
     }, 3000);
   } catch (error) {
     saved.value = false;
-    saveError.value = error?.message || 'Unable to save company settings';
+    saveError.value = error?.message || (language.isKhmer ? 'មិនអាចរក្សាទុកការកំណត់ក្រុមហ៊ុនបានទេ។' : 'Unable to save company settings');
   }
 }
 </script>

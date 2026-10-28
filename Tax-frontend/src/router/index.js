@@ -1,7 +1,27 @@
 import { createRouter, createWebHistory } from 'vue-router';
+import { canAccessRoles, canAccessRoute, homeRouteName } from './roleAccess';
+import { useAuthStore } from '@/stores/auth';
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
+  scrollBehavior(to, from, savedPosition) {
+    if (savedPosition) {
+      return { ...savedPosition, behavior: 'smooth' };
+    }
+
+    if (to.hash) {
+      return {
+        el: to.hash,
+        behavior: 'smooth',
+      };
+    }
+
+    return {
+      top: 0,
+      left: 0,
+      behavior: 'smooth',
+    };
+  },
   routes: [
     {
       path: '/login',
@@ -15,6 +35,7 @@ const router = createRouter({
       component: () => import('@/views/Authentication/Register.vue'),
       meta: { public: true, title: 'Create account | Tax System' },
     },
+
     {
       path: '/forgot-password',
       name: 'ForgotPassword',
@@ -27,13 +48,10 @@ const router = createRouter({
       component: () => import('@/views/dashboard/DashboardView.vue'),
       meta: { title: 'ផ្ទាំងគ្រប់គ្រងទូទៅ | Dashboard' },
     },
-    { path: '/admin', name: 'AdminDashboard', component: () => import('@/views/dashboard/DashboardView.vue'), meta: { roles: ['admin'], title: 'Admin Dashboard' } },
-    { path: '/user', name: 'UserDashboard', component: () => import('@/views/dashboard/DashboardView.vue'), meta: { roles: ['user'], title: 'User Dashboard' } },
-    { path: '/user/files', name: 'UserFiles', component: () => import('@/views/role/UserFilesView.vue'), meta: { roles: ['user'], title: 'My Files' } },
-    { path: '/user/projects', redirect: '/user/files', meta: { roles: ['user'] } },
-    { path: '/user/leave', name: 'UserLeave', component: () => import('@/views/role/UserLeaveView.vue'), meta: { roles: ['user'], title: 'Leave Requests' } },
-    { path: '/notifications', name: 'Notifications', component: () => import('@/views/role/NotificationsView.vue'), meta: { title: 'Notifications' } },
-    { path: '/admin/approvals', name: 'AdminApprovals', component: () => import('@/views/admin/AdminApprovalsView.vue'), meta: { roles: ['admin'], title: 'Approval Center' } },
+    { path: '/admin', name: 'AdminDashboard', component: () => import('@/views/dashboard/DashboardView.vue'), meta: { roles: ['owner'], title: 'Company Owner Dashboard' } },
+    { path: '/user', name: 'UserDashboard', component: () => import('@/views/dashboard/DashboardView.vue'), meta: { roles: ['owner', 'staff'], title: 'Company Workspace' } },
+    { path: '/superadmin', name: 'SuperAdminDashboard', component: () => import('@/views/admin/SuperAdminDashboardView.vue'), meta: { roles: ['superadmin'], title: 'Platform Overview | Super Admin' } },
+
     {
       path: '/pos',
       name: 'POS',
@@ -44,7 +62,13 @@ const router = createRouter({
       path: '/pos/register',
       name: 'RegisterManagement',
       component: () => import('@/views/pos/RegisterManagementView.vue'),
-      meta: { roles: ['admin'], title: 'Register & Cash Drawer' },
+      meta: { roles: ['owner', 'staff'], title: 'Register & Cash Drawer' },
+    },
+    {
+      path: '/sales',
+      name: 'Sales',
+      component: () => import('@/views/sales/SalesView.vue'),
+      meta: { title: 'ការលក់ | Sales' },
     },
     {
       path: '/sales/invoices',
@@ -86,7 +110,7 @@ const router = createRouter({
       path: '/inventory/items/:id/edit',
       name: 'EditItem',
       component: () => import('@/views/inventory/ItemFormView.vue'),
-      meta: { roles: ['admin'], title: 'Edit Item' },
+      meta: { roles: ['owner', 'staff'], title: 'Edit Item' },
     },
     {
       path: '/inventory/adjustments',
@@ -99,6 +123,12 @@ const router = createRouter({
       name: 'TransactionHistory',
       component: () => import('@/views/inventory/ItemTransactionHistoryView.vue'),
       meta: { title: 'ប្រវត្តិចរន្តទំនិញ | Item Transaction History' },
+    },
+    {
+      path: '/inventory/transfers',
+      name: 'BranchStockTransfers',
+      component: () => import('@/views/inventory/InventoryTransferView.vue'),
+      meta: { roles: ['owner', 'staff'], title: 'ផ្ទេរស្តុករវាងសាខា | Branch Stock Transfers' },
     },
     {
       path: '/purchase/vendors',
@@ -119,22 +149,22 @@ const router = createRouter({
       meta: { title: 'គណនីត្រូវសង | Accounts Payable (AP)' },
     },
     {
-      path: '/reports/sales-by-staff',
-      name: 'SalesByStaff',
-      component: () => import('@/views/reports/SalesReportView.vue'),
-      meta: { title: 'របាយការណ៍លក់តាមបុគ្គលិក | Sales by Staff' },
-    },
-    {
       path: '/reports/sales-by-vendor',
       name: 'SalesByVendor',
       component: () => import('@/views/reports/SalesByVendorReportView.vue'),
       meta: { title: 'របាយការណ៍លក់តាមអ្នកផ្គត់ផ្គង់ | Sales by Vendor' },
     },
     {
+      path: '/inventory/stock-costs',
+      name: 'StockCosts',
+      component: () => import('@/views/reports/InventoryValuationReportView.vue'),
+      meta: { title: 'ថ្លៃដើមស្តុក | Stock Costs' },
+    },
+    {
       path: '/reports/inventory-summary',
-      name: 'InventorySummary',
-      component: () => import('@/views/reports/InventorySummaryReportView.vue'),
-      meta: { title: 'របាយការណ៍ស្តុកសង្ខេប | Inventory Summary' },
+      name: 'InventoryValuation',
+      component: () => import('@/views/reports/InventoryValuationReportView.vue'),
+      meta: { title: 'របាយការណ៍តម្លៃស្តុក | Inventory Valuation' },
     },
     {
       path: '/reports/tax-vat',
@@ -152,7 +182,7 @@ const router = createRouter({
       path: '/tax/annual-filing',
       name: 'AnnualTaxFiling',
       component: () => import('@/views/tax/AnnualTaxFilingView.vue'),
-      meta: { title: 'Annual Tax Filing | Tax System' },
+      meta: { roles: ['owner', 'staff'], title: 'Annual Tax Filing | Tax System' },
     },
     {
       path: '/reports/sales-by-customer',
@@ -224,25 +254,19 @@ const router = createRouter({
       path: '/settings/company',
       name: 'CompanySettings',
       component: () => import('@/views/settings/CompanyShopsView.vue'),
-      meta: { title: 'ការកំណត់ក្រុមហ៊ុន និងសាខា | Company & Shops' },
+      meta: { roles: ['owner'], title: 'ការកំណត់ក្រុមហ៊ុន និងសាខា | Company & Shops' },
     },
     {
-      path: '/settings/policy',
-      name: 'PolicySettings',
-      component: () => import('@/views/settings/PolicySettingsView.vue'),
-      meta: { roles: ['admin'], title: 'Policy & Controls | System Settings' },
-    },
-    {
-      path: '/settings/policy-notes',
-      name: 'PolicyNotes',
-      component: () => import('@/views/settings/PolicyNotesView.vue'),
-      meta: { roles: ['admin', 'user'], title: 'Policy Notes | System Settings' },
+      path: '/company/profile',
+      name: 'CompanyProfile',
+      component: () => import('@/views/settings/CompanyProfileView.vue'),
+      meta: { title: 'Company Data Profile | Tax System' },
     },
     {
       path: '/settings/users',
       name: 'UserSettings',
       component: () => import('@/views/settings/UserAccessView.vue'),
-      meta: { roles: ['admin'], title: 'អ្នកប្រើប្រាស់ និងសិទ្ធិ | Users & Roles' },
+      meta: { roles: ['owner'], title: 'អ្នកប្រើប្រាស់ និងសិទ្ធិ | Users & Roles' },
     },
     {
       path: '/thermal-receipt',
@@ -262,15 +286,41 @@ const router = createRouter({
   },
 });
 
-router.beforeEach((to) => {
-  const authenticated = Boolean(localStorage.getItem('tax_token'));
+let refreshedToken = '';
+let refreshPromise = null;
+
+router.beforeEach(async (to) => {
+  let token = localStorage.getItem('tax_token');
+  const authenticated = Boolean(token);
   if (!to.meta.public && !authenticated) return { name: 'Login', query: { redirect: to.fullPath } };
-  if (to.meta.public && authenticated && to.name !== 'ForgotPassword') return { name: 'Dashboard' };
-  const user = JSON.parse(localStorage.getItem('tax_user') || 'null');
-  const role = String(user?.role || '').toLowerCase();
-  const allowedRoles = (to.meta.roles || []).map((allowedRole) => String(allowedRole).toLowerCase());
-  if (to.name === 'Dashboard' && user) return { name: role === 'admin' ? 'AdminDashboard' : 'UserDashboard' };
-  if (to.meta.roles && (!user || !allowedRoles.includes(role))) return { name: role === 'admin' ? 'AdminDashboard' : 'UserDashboard' };
+  if (to.meta.public && authenticated && !['ForgotPassword', 'VerifyEmail'].includes(to.name)) return { name: 'Dashboard' };
+  let user;
+  try {
+    user = JSON.parse(localStorage.getItem('tax_user') || 'null');
+  } catch {
+    user = null;
+  }
+  if (token && refreshedToken !== token) {
+    refreshedToken = token;
+    const auth = useAuthStore();
+    refreshPromise = auth.refreshUser().catch((error) => {
+      if (error.status !== 401) console.error('Unable to refresh the authenticated account.', error);
+      return error.status === 401 ? null : user;
+    });
+  }
+  if (token && refreshPromise) user = await refreshPromise;
+  token = localStorage.getItem('tax_token');
+  if (authenticated && !token) return { name: 'Login', query: { redirect: to.fullPath } };
+  if (token && !user) {
+    useAuthStore().reset();
+    refreshedToken = '';
+    refreshPromise = null;
+    return { name: 'Login', query: { redirect: to.fullPath } };
+  }
+  const destination = homeRouteName(user);
+  if (to.name === 'Dashboard' && user) return { name: destination };
+  if (user && !to.meta.public && !canAccessRoute(user, to.name, to.meta.roles, to.path)) return { name: destination };
+  if (to.meta.roles && !canAccessRoles(user, to.meta.roles)) return { name: destination };
   document.title = to.meta.title
     ? `${to.meta.title} - Tax System`
     : 'Tax System - Inventory & Sales';

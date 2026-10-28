@@ -8,7 +8,7 @@ const required = { customer_name: 'Buyer' };
 test('sales entry stores each sale category and recalculates local VAT', () => {
   const saved = prepareRecord('sales', {
     ...required,
-    quantity: 1.234,
+    quantity: 1,
     non_taxable_sale_usd: 10.5,
     export_sale_usd: 20,
     taxable_person_value_usd: 50,
@@ -18,7 +18,7 @@ test('sales entry stores each sale category and recalculates local VAT', () => {
     vat_amount_khr: 1,
   }, period);
 
-  assert.equal(saved.quantity, 1.234);
+  assert.equal(saved.quantity, 1);
   assert.equal(saved.non_taxable_sale_usd, 10.5);
   assert.equal(saved.non_taxable_sale_khr, 43050);
   assert.equal(saved.export_sale_usd, 20);
@@ -40,6 +40,13 @@ test('sales entry rejects negative category amounts', () => {
     ...required,
     local_sale_value_usd: -1,
   }, period), /non-negative amount/);
+});
+
+test('sales entry rejects fractional quantity', () => {
+  assert.throws(() => prepareRecord('sales', {
+    ...required,
+    quantity: 1.5,
+  }, period), /non-negative whole number/);
 });
 
 test('purchase VAT defaults to the purchase amount when taxable value is empty', () => {

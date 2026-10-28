@@ -105,7 +105,7 @@
                   class="badge text-uppercase "
                   :class="invoice.status === 'paid' ? 'text-bg-success-subtle text-success' : 'text-bg-secondary-subtle text-success'"
                 >
-                  {{ invoice.status }}
+                  {{ statusLabel(invoice.status) }}
                 </span>
               </td>
             </tr>
@@ -128,6 +128,7 @@
 import { computed, ref } from 'vue';
 import { useTaxStore } from '@/stores/tax';
 import { useLanguageStore } from '@/stores/language';
+import { matchesSearch } from '@/utils/search';
 
 const tax = useTaxStore();
 const language = useLanguageStore();
@@ -137,22 +138,29 @@ const method = ref('');
 
 const money = (val) => Number(val || 0).toFixed(2);
 
+const statusLabel = (status) => {
+  const value = String(status || '');
+  if (!language.isKhmer) return value;
+  if (value.toLowerCase() === 'paid') return 'បានបង់';
+  if (value.toLowerCase() === 'pending') return 'កំពុងរង់ចាំ';
+  if (value.toLowerCase() === 'partial' || value.toLowerCase() === 'partially paid') return 'បានបង់មួយផ្នែក';
+  if (value.toLowerCase() === 'overdue') return 'ហួសកំណត់';
+  return value;
+};
+
 const formatPaymentMethod = (rawMethod) => {
   if (!rawMethod) return '—';
   if (rawMethod === 'cash') return language.t('cash');
-  if (rawMethod === 'bank') return language.t('cardQr');
+  if (rawMethod === 'bank') return language.t('bank');
   if (rawMethod === 'customer_account') return language.t('account');
   return rawMethod.replace('_', ' ');
 };
 
 const filteredInvoices = computed(() => {
-  const q = query.value.trim().toLowerCase();
   const list = tax.invoices || [];
 
   return list.filter((invoice) => {
-    const matchesQuery = !q || 
-      String(invoice.id).toLowerCase().includes(q) || 
-      String(invoice.customer || '').toLowerCase().includes(q);
+    const matchesQuery = matchesSearch(query.value, invoice);
 
     const matchesMethod = !method.value || invoice.paymentMethod === method.value;
 

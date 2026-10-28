@@ -43,7 +43,7 @@
         <button
           type="button"
           class="btn-close"
-          aria-label="Close"
+          :aria-label="language.isKhmer ? 'បិទ' : 'Close'"
           @click="notice = ''"
         ></button>
       </div>
@@ -85,7 +85,7 @@
                   v-if="search.trim()"
                   class="btn btn-outline-secondary border-start-0 border-end-0 bg-white text-muted px-2"
                   type="button"
-                  aria-label="Clear input"
+                  :aria-label="language.isKhmer ? 'សម្អាតប្រអប់បញ្ចូល' : 'Clear input'"
                   @click="search = ''"
                 >
                   <i class="bi bi-x-circle-fill"></i>
@@ -118,18 +118,27 @@
                     <strong class="d-block text-truncate product-title">{{ item.nameEn }}</strong>
                     <small class="d-block text-muted text-truncate" lang="km">
                       {{ item.nameKh || item.nameKm || '—' }}
-                      <span class="barcode-badge ms-1">{{ item.barcode || 'No barcode' }}</span>
+                      <span class="barcode-badge ms-1">{{ item.barcode || (language.isKhmer ? 'គ្មានបាកូដ' : 'No barcode') }}</span>
+                    </small>
+                    <small v-if="item.vendorName" class="d-block text-muted text-truncate">
+                      {{ language.isKhmer ? 'អ្នកផ្គត់ផ្គង់៖ ' : 'Vendor: ' }}{{ item.vendorName }}
                     </small>
                   </div>
 
                   <div class="text-end flex-shrink-0">
-                    <strong class="d-block fs-6 text-dark">${{ money(item.retailPrice) }}</strong>
+                    <strong class="d-block fs-6 text-dark">                    ${{ moneyPrice(posSellingPrice(item)) }}</strong>
+                    <small class="d-block text-muted">AVCO: ${{ money(item.averageCost) }} / {{ item.baseUnit }}</small>
+                    <small class="d-block text-primary">
+                      ${{ moneyPrice(item.markupAmount) }} markup → ${{ moneyPrice(suggestedPrice(item)) }}
+                    </small>
                     <small
                       class="badge rounded-pill"
-                      :class="Number(item.qtyOnHand) > 0 ? 'bg-success-subtle text-success' : 'bg-danger-subtle text-danger'"
+                      :class="Number(item.qtyOnHand) > 0 ? 'bg-success-subtle text-success' : negativeStockBlocked ? 'bg-danger-subtle text-danger' : 'bg-warning-subtle text-warning'"
                     >
-                      {{ Number(item.qtyOnHand) || 0 }} {{ item.baseUnit || item.unit || 'unit' }}
-                      {{ language.isKhmer ? 'ក្នុងស្តុក' : 'in stock' }}
+                      {{ Number(item.qtyOnHand) || 0 }} {{ item.baseUnit || item.unit || (language.isKhmer ? 'ឯកតា' : 'unit') }}
+                      {{ Number(item.qtyOnHand) <= 0 && !negativeStockBlocked
+                        ? (language.isKhmer ? '· អនុញ្ញាតស្តុកអវិជ្ជមាន' : '· Backorder / Negative Stock')
+                        : (language.isKhmer ? 'ក្នុងស្តុក' : 'in stock') }}
                     </small>
                   </div>
                 </button>
@@ -179,7 +188,7 @@
               <tbody>
                 <tr
                   v-for="(line, index) in tax.cart"
-                  :key="line.itemId || index"
+                  :key="`${line.itemId}-${line.unit}` || index"
                   class="cart-row"
                 >
                   <td class="ps-3 ps-lg-4 text-center text-muted index-cell">{{ index + 1 }}</td>
@@ -188,11 +197,32 @@
                     <small class="d-block text-muted" lang="km">
                       {{ line.nameKh || line.nameKm || '—' }}
                     </small>
+                    <small class="d-block text-muted">
+                      AVCO: ${{ money(line.averageCost) }} / {{ line.baseUnit || line.unit }}
+                      <span class="text-primary ms-1">${{ moneyPrice(line.markupAmount) }} markup → ${{ moneyPrice(suggestedPrice(line)) }}</span>
+                    </small>
+                    <small
+                      v-if="!negativeStockBlocked && (Number(line.available) <= 0 || Number(line.qty) * Number(line.unitRatio || 1) > Number(line.available))"
+                      class="badge bg-warning-subtle text-warning mt-1"
+                    >
+                      {{ language.isKhmer ? 'ការបញ្ជាទិញក្រោយ / ស្តុកអវិជ្ជមាន' : 'Backorder / Negative Stock' }}
+                    </small>
                   </td>
                   <td>
-                    <span class="badge unit-badge">
-                      {{ line.unit || line.baseUnit || 'unit' }}
-                    </span>
+                    <select
+                      class="form-select form-select-sm unit-badge"
+                      :value="line.unit"
+                      :aria-label="language.isKhmer ? 'ឯកតាលក់' : 'Selling unit'"
+                      @change="changeCartUnit(line, $event.target.value)"
+                    >
+                      <option
+                        v-for="unit in line.units"
+                        :key="unit.name"
+                        :value="unit.name"
+                      >
+                        {{ unit.name }} ×{{ unit.ratio }}
+                      </option>
+                    </select>
                   </td>
                   <td>
                     <div class="qty-control d-flex align-items-center justify-content-center">
@@ -200,14 +230,15 @@
                         v-model.number="line.qty"
                         type="number"
                         min="1"
-                        :max="line.available || 9999"
+                        step="1"
+                        :max="negativeStockBlocked ? (line.availableInUnit ?? 9999) : undefined"
                         class="form-control form-control-sm text-center qty-input"
                         @blur="validateLineQty(line)"
                       />
                     </div>
                   </td>
                   <td class="text-end fw-semibold text-secondary tabular-nums">
-                    ${{ money(line.unitPrice) }}
+                    ${{ moneyPrice(line.unitPrice) }}
                   </td>
                   <td>
                     <div class="input-group input-group-sm">
@@ -364,7 +395,7 @@
                     v-else-if="khqrImageUrl"
                     :src="khqrImageUrl"
                     class="khqr-image"
-                    alt="KHQR Code"
+                    :alt="language.isKhmer ? 'កូដ KHQR' : 'KHQR Code'"
                   />
                   <i v-else class="bi bi-qr-code khqr-empty"></i>
                 </div>
@@ -378,7 +409,7 @@
                   </small>
 
                   <div class="d-flex align-items-center gap-2 mt-2">
-                    <select v-model="qrCurrency" class="form-select form-select-sm currency-select" aria-label="KHQR Currency">
+                    <select v-model="qrCurrency" class="form-select form-select-sm currency-select" :aria-label="language.isKhmer ? 'រូបិយប័ណ្ណ KHQR' : 'KHQR Currency'">
                       <option value="USD">USD ($)</option>
                       <option value="KHR">KHR (៛)</option>
                     </select>
@@ -418,7 +449,9 @@
                       @click="verifyKhqr(true)"
                     >
                       <i :class="['me-1 bi', khqrChecking ? 'bi-arrow-repeat spin' : 'bi-check2-circle']"></i>
-                      {{ khqrChecking ? 'Checking...' : 'Check' }}
+                      {{ khqrChecking
+                        ? (language.isKhmer ? 'កំពុងពិនិត្យ...' : 'Checking...')
+                        : (language.isKhmer ? 'ពិនិត្យ' : 'Check') }}
                     </button>
                     <button
                       type="button"
@@ -426,7 +459,7 @@
                       :disabled="khqrLoading"
                       @click="refreshKhqr"
                     >
-                      <i class="bi bi-arrow-clockwise me-1"></i>Refresh
+                      <i class="bi bi-arrow-clockwise me-1"></i>{{ language.isKhmer ? 'ផ្ទុកឡើងវិញ' : 'Refresh' }}
                     </button>
                   </div>
                 </div>
@@ -538,12 +571,16 @@
       <ThermalReceipt40Col
         :company="printReceipt.company"
         :receipt-no="printReceipt.receiptNo"
+        :issue-date="printReceipt.issueDate"
         :cashier-name="printReceipt.cashierName"
+        :customer-name="printReceipt.customerName"
         :items="printReceipt.items"
         :net-sale="printReceipt.netSale"
         :total-vat="printReceipt.totalVat"
+        :vat-rate="printReceipt.vatRate"
         :grand-total="printReceipt.grandTotal"
         :tendered-u-s-d="printReceipt.tenderedUSD"
+        :tendered-k-h-r="printReceipt.tenderedKHR"
         :change-u-s-d="printReceipt.changeUSD"
         :exchange-rate="exchangeRate"
         :khqr-image="printReceipt.khqrImage"
@@ -559,10 +596,12 @@ import { useLanguageStore } from '@/stores/language';
 import ThermalReceipt40Col from '@/components/receipt/ThermalReceipt40Col.vue';
 import { printThermalReceipt } from '@/utils/thermalPrint';
 import { api } from '@/services/api';
+import { matchesSearch } from '@/utils/search';
 
 // Stores
 const tax = useTaxStore();
 const language = useLanguageStore();
+const negativeStockBlocked = computed(() => tax.settings?.policy?.inventory?.negativeStockBlocked !== false);
 
 // UI States
 const search = ref('');
@@ -608,6 +647,13 @@ const customerCreditBlocked = computed(() =>
   paymentMethod.value === 'customer_account' && !selectedCustomer.value
 );
 
+const salesPolicy = computed(() => tax.settings?.policy?.sales || {});
+const discountApprovalRequired = computed(() => salesPolicy.value.discountApprovalRequired !== false);
+const maxDiscountPercent = computed(() => {
+  const configured = Number(salesPolicy.value.maxDiscountPercent);
+  return Number.isFinite(configured) ? Math.max(0, Math.min(100, configured)) : 10;
+});
+
 const paymentMethods = computed(() => [
   { value: 'cash', label: language.t('cash'), icon: 'bi bi-cash-stack' },
   { value: 'bank', label: language.t('cardQr'), icon: 'bi bi-qr-code-scan' },
@@ -623,17 +669,10 @@ const khqrMerchantName = computed(() =>
 );
 
 const searchResults = computed(() => {
-  const query = search.value.trim().toLowerCase();
-  if (!query) return [];
+  if (!search.value.trim()) return [];
 
   return (tax.items || [])
-    .filter((item) => {
-      const searchTarget = [item.nameEn, item.nameKh, item.nameKm, item.barcode]
-        .filter(Boolean)
-        .join(' ')
-        .toLowerCase();
-      return searchTarget.includes(query);
-    })
+    .filter((item) => matchesSearch(search.value, item))
     .slice(0, 6);
 });
 
@@ -657,11 +696,24 @@ const activeCashDifference = computed(() => canPay.value ? changeDue.value : amo
 
 const canPay = computed(() => {
   if (!tax.cart.length || customerCreditBlocked.value) return false;
+  if (tax.cart.some((line) => (
+    !Number.isFinite(Number(line.qty))
+    || Number(line.qty) <= 0
+    || !Number.isSafeInteger(Number(line.qty))
+    || (negativeStockBlocked.value && (
+      !Number.isFinite(Number(line.available))
+      || Number(line.qty) * Number(line.unitRatio || 1) > Number(line.available)
+    ))
+  ))) return false;
   if (paymentMethod.value === 'bank') {
     return khqrStatus.value === 'paid' && Boolean(khqrIntentId.value);
   }
   if (paymentMethod.value !== 'cash') return true;
-  return totalTenderedUsd.value >= (Number(tax.cartTotal || 0) - 0.001);
+  const usdTender = Number(receivedUsd.value);
+  const khrTender = Number(receivedKhr.value);
+  if (!Number.isFinite(usdTender) || usdTender < 0 || Math.abs(usdTender * 100 - Math.round(usdTender * 100)) > 1e-8) return false;
+  if (!Number.isSafeInteger(khrTender) || khrTender < 0) return false;
+  return Math.round((totalTenderedUsd.value + Number.EPSILON) * 100) / 100 >= Number(tax.cartTotal || 0);
 });
 
 const khqrStatusInfo = computed(() => {
@@ -670,25 +722,25 @@ const khqrStatusInfo = computed(() => {
       return {
         className: 'bg-success-subtle text-success fw-semibold',
         icon: 'bi bi-check-circle-fill',
-        text: 'Payment verified',
+        text: language.isKhmer ? 'បានផ្ទៀងផ្ទាត់ការទូទាត់' : 'Payment verified',
       };
     case 'expired':
       return {
         className: 'bg-warning-subtle text-warning fw-semibold',
         icon: 'bi bi-exclamation-triangle',
-        text: 'QR expired',
+        text: language.isKhmer ? 'QR ផុតកំណត់' : 'QR expired',
       };
     case 'error':
       return {
         className: 'bg-danger-subtle text-danger fw-semibold',
         icon: 'bi bi-x-circle',
-        text: 'Verification unavailable',
+        text: language.isKhmer ? 'មិនអាចផ្ទៀងផ្ទាត់បានទេ' : 'Verification unavailable',
       };
     default:
       return {
         className: 'bg-light text-muted',
         icon: 'bi bi-clock-history',
-        text: 'Waiting for payment confirmation',
+        text: language.isKhmer ? 'កំពុងរង់ចាំការបញ្ជាក់ការទូទាត់' : 'Waiting for payment confirmation',
       };
   }
 });
@@ -698,6 +750,24 @@ const khqrStatusInfo = computed(() => {
 // ==========================================
 function money(val) {
   return (Number(val) || 0).toFixed(2);
+}
+
+function moneyPrice(val) {
+  return (Number(val) || 0).toFixed(4);
+}
+
+function suggestedPrice(item) {
+  const cost = Number(item.averageCost || item.purchaseCost || 0);
+  return (cost + Number(item.markupAmount || 0)) * Number(item.unitRatio || 1);
+}
+
+function posSellingPrice(item) {
+  const units = Array.isArray(item.units) ? item.units : [];
+  const baseUnit = item.baseUnit || item.unit || 'Unit';
+  const unit = units.find((entry) => String(entry?.name || '').toLowerCase() === baseUnit.toLowerCase());
+  const retailPrice = Number(unit?.retailPrice ?? item.retailPrice);
+  if (Number.isFinite(retailPrice) && retailPrice > 0) return retailPrice;
+  return suggestedPrice(item);
 }
 
 function lineTotal(line) {
@@ -718,18 +788,47 @@ function showNotice(message, type = 'success') {
 
 function validateLineQty(line) {
   const available = Number(line.available);
-  if (!Number.isFinite(Number(line.qty)) || Number(line.qty) < 1) {
+  if (!Number.isFinite(Number(line.qty)) || Number(line.qty) <= 0) {
     line.qty = 1;
+  } else if (!Number.isSafeInteger(Number(line.qty))) {
+    showNotice(
+      language.isKhmer ? 'បរិមាណត្រូវតែជាចំនួនគត់។' : 'Quantity must be a whole number.',
+      'warning'
+    );
   }
-  if (available > 0 && Number(line.qty) > available) {
-    line.qty = available;
+  const ratio = Number(line.unitRatio || 1);
+  const availableInUnit = Math.floor(available / ratio);
+  line.availableInUnit = availableInUnit;
+  if (negativeStockBlocked.value && Number.isFinite(available) && Number(line.qty) * ratio > available) {
+    line.qty = availableInUnit;
     showNotice(
       language.isKhmer 
-        ? `ទំនិញនេះនៅសល់ត្រឹមតែ ${available} ប៉ុណ្ណោះ។` 
-        : `Only ${available} unit(s) are available.`,
+        ? `ទំនិញនេះនៅសល់ត្រឹមតែ ${availableInUnit} ${line.unit} ប៉ុណ្ណោះ។`
+        : `Only ${availableInUnit} ${line.unit}(s) are available.`,
       'danger'
     );
   }
+}
+
+function changeCartUnit(line, unitName) {
+  const unit = line.units.find((entry) => String(entry.name).toLowerCase() === String(unitName).toLowerCase());
+  if (!unit) return;
+  const ratio = Number(unit.ratio);
+  if (!Number.isSafeInteger(ratio) || ratio < 1) {
+    showNotice(language.isKhmer ? 'ឯកតាបម្លែងមិនត្រឹមត្រូវ។' : 'This unit conversion is invalid.', 'danger');
+    return;
+  }
+
+  const cost = Number(line.averageCost || line.purchaseCost || 0);
+  const catalogPrice = Number(unit.retailPrice);
+  line.unit = unit.name;
+  line.unitRatio = ratio;
+  line.unitPrice = Number.isFinite(catalogPrice) && catalogPrice > 0
+    ? catalogPrice
+    : Number(((cost + Number(line.markupAmount || 0)) * ratio).toFixed(4));
+  line.availableInUnit = Math.floor(Number(line.available || 0) / ratio);
+  validateLineQty(line);
+  validateLineDiscount(line);
 }
 
 function validateLineDiscount(line) {
@@ -744,7 +843,7 @@ function addItem(item) {
     ? (item.nameKh || item.nameKm)
     : item.nameEn;
 
-  if (stock <= 0) {
+  if (negativeStockBlocked.value && stock <= 0) {
     showNotice(
       language.isKhmer ? `ទំនិញ "${displayName}" អស់ពីស្តុកហើយ។` : `"${displayName}" is out of stock.`,
       'danger'
@@ -752,7 +851,26 @@ function addItem(item) {
     return;
   }
 
+  const alreadyInStockUnits = tax.cart
+    .filter((line) => Number(line.itemId) === Number(item.id))
+    .reduce((sum, line) => sum + Number(line.qty) * Number(line.unitRatio || 1), 0);
+  if (negativeStockBlocked.value && alreadyInStockUnits + 1 > stock) {
+    showNotice(
+      language.isKhmer ? `ទំនិញនេះនៅសល់ត្រឹមតែ ${stock} ប៉ុណ្ណោះ។` : `Only ${stock} unit(s) are available.`,
+      'danger'
+    );
+    return;
+  }
+
   tax.addToCart(item);
+  if (!negativeStockBlocked.value && stock <= 0) {
+    showNotice(
+      language.isKhmer
+        ? 'ការបញ្ជាទិញក្រោយ / ស្តុកអវិជ្ជមាន៖ ការលក់នេះនឹងធ្វើឱ្យស្តុកក្រោមសូន្យ។'
+        : 'Backorder / Negative Stock: this sale will take stock below zero.',
+      'warning'
+    );
+  }
   search.value = '';
   nextTick(() => searchInput.value?.focus());
 }
@@ -819,7 +937,7 @@ async function refreshKhqr() {
     if (currentGen === qrGeneration) {
       resetKhqrState();
       khqrStatus.value = 'error';
-      khqrError.value = error?.message || 'Unable to generate KHQR';
+      khqrError.value = error?.message || (language.isKhmer ? 'មិនអាចបង្កើត KHQR បានទេ។' : 'Unable to generate KHQR');
     }
   } finally {
     if (currentGen === qrGeneration) khqrLoading.value = false;
@@ -856,18 +974,20 @@ async function verifyKhqr(manual = false) {
 
     khqrStatus.value = result.status;
     if (result.status === 'paid') {
-      showNotice('Payment verified. Completing sale...');
+      showNotice(language.isKhmer ? 'បានផ្ទៀងផ្ទាត់ការទូទាត់។ កំពុងបញ្ចប់ការលក់...' : 'Payment verified. Completing sale...');
       await completeSale();
     } else if (result.status === 'expired') {
-      khqrError.value = 'This payment request expired. Refresh QR.';
+      khqrError.value = language.isKhmer ? 'សំណើទូទាត់នេះបានផុតកំណត់។ សូមផ្ទុក QR ឡើងវិញ។' : 'This payment request expired. Refresh QR.';
     } else if (manual && result.status === 'pending') {
       scheduleKhqrCheck(targetId, qrGeneration);
     }
     return result.status;
   } catch (error) {
     if (targetId === khqrIntentId.value) {
-      khqrStatus.value = 'error';
-      khqrError.value = error?.message || 'Unable to verify payment';
+      const retryable = error?.status === undefined || error.status === 429 || error.status >= 500;
+      khqrStatus.value = retryable ? 'pending' : 'error';
+      khqrError.value = error?.message || (language.isKhmer ? 'មិនអាចផ្ទៀងផ្ទាត់ការទូទាត់បានទេ។' : 'Unable to verify payment');
+      if (retryable) scheduleKhqrCheck(targetId, qrGeneration);
     }
     return 'error';
   } finally {
@@ -878,7 +998,7 @@ async function verifyKhqr(manual = false) {
 async function copyKhqr() {
   if (!khqrPayload.value) return;
   await navigator.clipboard?.writeText(khqrPayload.value);
-  showNotice('KHQR payload copied to clipboard.');
+  showNotice(language.isKhmer ? 'បានចម្លងទិន្នន័យ KHQR ទៅក្ដារតម្បៀតខ្ទាស់។' : 'KHQR payload copied to clipboard.');
 }
 
 // ==========================================
@@ -889,26 +1009,22 @@ async function completeSale() {
   processing.value = true;
 
   try {
-    const requiresOverride = tax.cart.some(
-      (line) => Number(line.discount || 0) > (Number(line.unitPrice || 0) * Number(line.qty || 0) * 0.10)
+    const requiresOverride = discountApprovalRequired.value && tax.cart.some(
+      (line) => Number(line.discount || 0) > (Number(line.unitPrice || 0) * Number(line.qty || 0) * maxDiscountPercent.value / 100)
     );
 
     let managerPin = '';
     if (requiresOverride) {
       managerPin = window.prompt(
         language.isKhmer 
-          ? 'បញ្ចូល PIN អ្នកគ្រប់គ្រង ដើម្បីអនុម័តបញ្ចុះតម្លៃលើស ១០%' 
-          : 'Enter manager PIN to approve a discount above 10%'
+          ? `បញ្ចូល PIN អ្នកគ្រប់គ្រង ដើម្បីអនុម័តបញ្ចុះតម្លៃលើស ${maxDiscountPercent.value}%`
+          : `Enter manager PIN to approve a discount above ${maxDiscountPercent.value}%`
       );
       if (!managerPin) {
         processing.value = false;
         return;
       }
     }
-
-    const tenderedUSD = paymentMethod.value === 'cash' 
-      ? totalTenderedUsd.value 
-      : Number(tax.cartTotal || 0);
 
     const invoice = await tax.completeSale({
       customerName: customerName.value,
@@ -931,17 +1047,17 @@ async function completeSale() {
         vatTin: tax.settings?.vatTin || '',
       },
       receiptNo: invoice.id,
+      issueDate: invoice.issueDate,
       cashierName: invoice.staff || '',
-      items: tax.cart.map((line) => ({
-        ...line,
-        uomName: line.unit || line.baseUnit || 'unit',
-      })),
+      customerName: invoice.customer || customerName.value,
+      items: invoice.items,
       netSale: Number(invoice.netSale) || 0,
       totalVat: Number(invoice.vat) || 0,
+      vatRate: Number(invoice.vatRate) || 0,
       grandTotal: Number(invoice.total) || 0,
-      tenderedKHR: paymentMethod.value === 'cash' ? Math.round(Number(receivedKhr.value) || 0) : Number(invoice.receivedKHR) || 0,
-      tenderedUSD: paymentMethod.value === 'cash' ? Math.round((Number(receivedUsd.value) || 0) * 100) / 100 : Number(invoice.receivedUSD) || 0,
-      changeUSD: paymentMethod.value === 'cash' ? Math.max(0, tenderedUSD - Number(invoice.total || 0)) : 0,
+      tenderedKHR: Number(invoice.receivedKHR) || 0,
+      tenderedUSD: Number(invoice.receivedUSD) || 0,
+      changeUSD: paymentMethod.value === 'cash' ? Number(invoice.changeUSD) || 0 : 0,
       khqrImage: paymentMethod.value === 'bank' ? khqrImageUrl.value : '',
     };
 

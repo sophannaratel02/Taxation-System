@@ -17,8 +17,8 @@ function validateRuntimeSettings() {
   }
 
   const adminPassword = String(process.env.ADMIN_PASSWORD || '').trim();
-  if (isProduction() && (!adminPassword || adminPassword.length < 8)) {
-    throw new Error('ADMIN_PASSWORD must be set to a strong password in production.');
+  if (isProduction() && adminPassword.length < 12) {
+    throw new Error('ADMIN_PASSWORD must be at least 12 characters in production.');
   }
 
   const corsOrigin = String(process.env.CORS_ORIGIN || '').trim();
@@ -37,8 +37,7 @@ async function startServer() {
     });
     return server;
   } catch (error) {
-    console.error('Startup validation failed:', error.message);
-    console.error('Check JWT_SECRET, ADMIN_PASSWORD, CORS_ORIGIN, MYSQL_HOST, MYSQL_PORT, MYSQL_USER, MYSQL_PASSWORD, and MYSQL_DATABASE in Tax-backend/.env.');
+    console.error('Backend startup failed:', error);
     await pool.end().catch(() => {});
     process.exitCode = 1;
     return null;

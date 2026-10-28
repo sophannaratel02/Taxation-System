@@ -9,7 +9,7 @@
             <span class="status-dot"></span>
             <span>{{ language.t('customerSales') }}</span>
             <span class="text-muted">/</span>
-            <span class="text-secondary">CRM & Credit Ledger</span>
+            <span class="text-secondary">{{ language.isKhmer ? 'គ្រប់គ្រងអតិថិជន និងបញ្ជីឥណទាន' : 'CRM & Credit Ledger' }}</span>
           </div>
           <h1 class="h3 fw-bolder text-slate-900 mb-1 tracking-tight">
             {{ language.isKhmer ? 'បញ្ជីព័ត៌មានអតិថិជន' : 'Customer Directory & Accounts' }}
@@ -104,7 +104,7 @@
           <input
             v-model.trim="search"
             class="form-control border-start-0 border-end-0 shadow-none ps-2"
-            :placeholder="language.isKhmer ? 'ស្វែងរកឈ្មោះ, ទូរស័ព្ទ, TIN...' : 'Search name, phone, TIN...'"
+            :placeholder="language.isKhmer ? 'ស្វែងរកព័ត៌មានអតិថិជនទាំងអស់...' : 'Search all customer details...'"
           />
           <button v-if="search" class="btn btn-outline-light border-start-0 border text-muted" type="button" @click="search = ''">
             <i class="bi bi-x-circle-fill fs-xs"></i>
@@ -119,7 +119,7 @@
             <tr>
               <th class="ps-4">{{ language.t('customer') }}</th>
               <th>{{ language.isKhmer ? 'លេខទូរស័ព្ទ' : 'Contact' }}</th>
-              <th>VAT TIN</th>
+              <th>{{ language.isKhmer ? 'លេខអត្តសញ្ញាណកម្មសារពើពន្ធ (VAT TIN)' : 'VAT TIN' }}</th>
               <th class="text-end">{{ language.isKhmer ? 'ប្រាក់កក់' : 'Deposit' }}</th>
               <th class="text-end">{{ language.t('balance') }} (AR)</th>
               <th class="text-end pe-4">{{ language.isKhmer ? 'សកម្មភាព' : 'Actions' }}</th>
@@ -135,13 +135,22 @@
                   </div>
                   <div>
                     <span class="fw-bold text-slate-900 d-block tracking-tight text-name">
-                      {{ cust.name || 'Walk-in Customer' }}
+                      {{ cust.name || (language.isKhmer ? 'អតិថិជនដើរចូល' : 'Walk-in Customer') }}
                     </span>
                     <div class="d-flex align-items-center gap-2 mt-0.5">
                       <span class="badge text-slate-600 bg-slate-100 border px-1.5 py-0.5 fw-normal font-monospace fs-xxs">
                         Limit: ${{ formatMoney(cust.creditLimit) }}
                       </span>
                     </div>
+                    <small class="d-block text-muted mt-1">
+                      <i class="bi bi-person-badge me-1"></i>{{ cust.representative || '—' }}
+                    </small>
+                    <small class="d-block text-muted">
+                      <i class="bi bi-envelope me-1"></i>{{ cust.email || '—' }}
+                    </small>
+                    <small class="d-block text-muted customer-address">
+                      <i class="bi bi-geo-alt me-1"></i>{{ cust.address || '—' }}
+                    </small>
                   </div>
                 </div>
               </td>
@@ -188,6 +197,7 @@
               <td class="text-end pe-4 text-nowrap">
                 <div class="action-btn-group">
                   <button
+                    v-if="isAdmin"
                     class="btn btn-icon btn-subtle"
                     type="button"
                     :title="language.isKhmer ? 'កែប្រែ' : 'Edit'"
@@ -196,6 +206,7 @@
                     <i class="bi bi-pencil"></i>
                   </button>
                   <button
+                    v-if="isAdmin"
                     class="btn btn-icon btn-subtle-danger"
                     type="button"
                     :title="language.t('delete')"
@@ -245,7 +256,7 @@
                     : (language.isKhmer ? 'បន្ថែមអតិថិជនថ្មី' : 'Create New Customer') 
                   }}
                 </h6>
-                <small class="text-slate-400 fs-xxs">Configure limits and profile data</small>
+                <small class="text-slate-400 fs-xxs">{{ language.isKhmer ? 'កំណត់ដែនកំណត់ និងព័ត៌មានប្រវត្តិរូប' : 'Configure limits and profile data' }}</small>
               </div>
             </div>
             <button class="btn btn-close-modal" type="button" @click="closeModal">
@@ -255,10 +266,10 @@
 
           <form class="card-body p-4" @submit.prevent="saveForm">
             <div class="row g-3">
-              <!-- Customer Name -->
+              <!-- Company Name -->
               <div class="col-md-6">
                 <label class="form-label fs-xs fw-bold text-slate-600">
-                  {{ language.isKhmer ? 'ឈ្មោះអតិថិជន' : 'Customer Name' }}
+                  {{ language.isKhmer ? 'ឈ្មោះក្រុមហ៊ុន' : 'Name (company)' }}
                   <span class="text-danger">*</span>
                 </label>
                 <div class="input-group">
@@ -266,7 +277,8 @@
                   <input
                     v-model.trim="formData.name"
                     class="form-control border-start-0"
-                    placeholder="e.g. Sok Chenda"
+                    :placeholder="language.isKhmer ? 'ឧ. ក្រុមហ៊ុន ABC Trading' : 'e.g. ABC Trading Co.'"
+                    autocomplete="organization"
                     required
                   />
                 </div>
@@ -287,17 +299,64 @@
                 </div>
               </div>
 
+              <div class="col-md-6">
+                <label class="form-label fs-xs fw-bold text-slate-600" for="customer-representative">
+                  {{ language.isKhmer ? 'អ្នកតំណាង' : 'Representative' }}
+                </label>
+                <div class="input-group">
+                  <span class="input-group-text bg-slate-50 border-end-0 text-muted"><i class="bi bi-person-badge"></i></span>
+                  <input
+                    id="customer-representative"
+                    v-model.trim="formData.representative"
+                    class="form-control border-start-0"
+                    maxlength="180"
+                    autocomplete="name"
+                  />
+                </div>
+              </div>
+
+              <div class="col-md-6">
+                <label class="form-label fs-xs fw-bold text-slate-600" for="customer-email">
+                  {{ language.isKhmer ? 'អ៊ីមែល' : 'Email' }}
+                </label>
+                <div class="input-group">
+                  <span class="input-group-text bg-slate-50 border-end-0 text-muted"><i class="bi bi-envelope"></i></span>
+                  <input
+                    id="customer-email"
+                    v-model.trim="formData.email"
+                    class="form-control border-start-0"
+                    type="email"
+                    maxlength="255"
+                    autocomplete="email"
+                  />
+                </div>
+              </div>
+
+              <div class="col-12">
+                <label class="form-label fs-xs fw-bold text-slate-600" for="customer-address">
+                  {{ language.isKhmer ? 'អាសយដ្ឋាន' : 'Address' }}
+                </label>
+                <textarea
+                  id="customer-address"
+                  v-model.trim="formData.address"
+                  class="form-control"
+                  rows="2"
+                  maxlength="5000"
+                  autocomplete="street-address"
+                ></textarea>
+              </div>
+
               <!-- VAT TIN -->
               <div class="col-md-6">
                 <label class="form-label fs-xs fw-bold text-slate-600">
-                  VAT TIN (ពន្ធដារ)
+                  {{ language.isKhmer ? 'លេខអត្តសញ្ញាណកម្មសារពើពន្ធ (VAT TIN)' : 'VAT TIN' }}
                 </label>
                 <div class="input-group">
                   <span class="input-group-text bg-slate-50 border-end-0 text-muted font-monospace">#</span>
                   <input
                     v-model.trim="formData.vatTin"
                     class="form-control border-start-0 font-monospace text-uppercase"
-                    placeholder="K001-99887766"
+                    :placeholder="language.isKhmer ? 'ឧ. K001-99887766' : 'K001-99887766'"
                   />
                 </div>
               </div>
@@ -369,10 +428,19 @@
 import { computed, reactive, ref } from 'vue';
 import { useTaxStore } from '@/stores/tax';
 import { useLanguageStore } from '@/stores/language';
+import { userHasPermission } from '@/router/permissionAccess';
 import { alertDialog, confirmDialog } from '@/utils/dialog';
+import { matchesSearch } from '@/utils/search';
 
 const tax = useTaxStore();
 const language = useLanguageStore();
+const isAdmin = computed(() => {
+  try {
+    return userHasPermission(JSON.parse(localStorage.getItem('tax_user') || 'null'), 'sales.write');
+  } catch {
+    return false;
+  }
+});
 
 const search = ref('');
 const filterType = ref('all');
@@ -384,6 +452,9 @@ const saving = ref(false);
 const formData = reactive({
   name: '',
   phone: '',
+  address: '',
+  representative: '',
+  email: '',
   vatTin: '',
   creditLimit: 0,
   deposit: 0,
@@ -405,13 +476,7 @@ const filteredCustomers = computed(() => {
   }
 
   if (!search.value) return list;
-  const q = search.value.toLowerCase();
-  return list.filter(
-    (c) =>
-      (c.name || '').toLowerCase().includes(q) ||
-      (c.phone || '').includes(q) ||
-      (c.vatTin || '').toLowerCase().includes(q)
-  );
+  return list.filter((customer) => matchesSearch(search.value, customer));
 });
 
 function getInitials(name) {
@@ -469,6 +534,9 @@ function openCreateModal() {
   Object.assign(formData, {
     name: '',
     phone: '',
+    address: '',
+    representative: '',
+    email: '',
     vatTin: '',
     creditLimit: 0,
     deposit: 0,
@@ -482,6 +550,9 @@ function openEditModal(cust) {
   Object.assign(formData, {
     name: cust.name || '',
     phone: cust.phone || '',
+    address: cust.address || '',
+    representative: cust.representative || '',
+    email: cust.email || '',
     vatTin: cust.vatTin || '',
     creditLimit: Number(cust.creditLimit || 0),
     deposit: Number(cust.deposit || 0),
@@ -496,10 +567,26 @@ function closeModal() {
 
 async function saveForm() {
   const updating = isEditing.value && Boolean(editingId.value);
+  const email = formData.email.trim();
+  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    await alertDialog({
+      title: language.isKhmer ? 'អ៊ីមែលមិនត្រឹមត្រូវ' : 'Invalid email',
+      message: language.isKhmer ? 'សូមបញ្ចូលអាសយដ្ឋានអ៊ីមែលត្រឹមត្រូវ។' : 'Enter a valid customer email address.',
+      variant: 'danger',
+      confirmText: language.isKhmer ? 'យល់ព្រម' : 'OK',
+    });
+    return;
+  }
   saving.value = true;
   try {
     const payload = {
       ...formData,
+      name: formData.name.trim(),
+      phone: formData.phone.trim(),
+      address: formData.address.trim(),
+      representative: formData.representative.trim(),
+      email: email.toLowerCase(),
+      vatTin: formData.vatTin.trim(),
       creditLimit: Number(formData.creditLimit || 0),
       deposit: Number(formData.deposit || 0),
     };
@@ -524,7 +611,7 @@ async function saveForm() {
   } catch (err) {
     await alertDialog({
       title: language.isKhmer ? 'រក្សាទុកអតិថិជនបរាជ័យ' : 'Unable to save customer',
-      message: err?.response?.data?.message || err.message || (
+      message: err?.data?.message || err.message || (
         language.isKhmer ? 'មិនអាចរក្សាទុកព័ត៌មានអតិថិជនបានទេ។' : 'The customer could not be saved.'
       ),
       variant: 'danger',
@@ -692,6 +779,11 @@ async function deleteCust(cust) {
 }
 .text-name {
   font-size: 0.88rem;
+}
+.customer-address {
+  max-width: 280px;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 .avatar-box {
   width: 36px;

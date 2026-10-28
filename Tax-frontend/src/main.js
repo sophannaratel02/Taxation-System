@@ -3,16 +3,25 @@ import { createPinia } from 'pinia';
 import App from './App.vue';
 import router from './router';
 import './assets/main.css';
+import { useAuthStore } from './stores/auth';
 import { useTaxStore } from './stores/tax';
 
-// នាំចូល Bootstrap CSS & JS និង Icons
 import 'bootstrap/dist/css/bootstrap.min.css';
 import 'bootstrap-icons/font/bootstrap-icons.css';
-import 'bootstrap/dist/js/bootstrap.bundle.min.js';
 
 const app = createApp(App);
+app.config.performance = true;
 app.use(createPinia());
 app.use(router);
+
+const authStore = useAuthStore();
 const taxStore = useTaxStore();
-const startup = localStorage.getItem('tax_token') ? taxStore.initialize() : Promise.resolve();
-startup.finally(() => app.mount('#app'));
+router.isReady()
+  .then(async () => {
+    if (localStorage.getItem('tax_token') && authStore.user) await taxStore.initialize();
+    app.mount('#app');
+  })
+  .catch((error) => {
+    console.error('Application startup failed.', error);
+    app.mount('#app');
+  });

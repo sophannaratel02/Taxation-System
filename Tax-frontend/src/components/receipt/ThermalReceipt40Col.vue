@@ -1,9 +1,9 @@
 <template>
-  <article class="receipt" aria-label="Printed sales invoice">
+  <article class="receipt" :aria-label="language.isKhmer ? 'វិក្កយបត្រលក់បោះពុម្ព' : 'Printed sales invoice'">
     <!-- Header / Brand -->
     <header class="receipt-header">
       <div class="brand-row">
-        <img :src="logoUrl" class="receipt-logo" alt="Axis Investment Consulting" />
+        <img :src="logoUrl" class="receipt-logo" :alt="language.isKhmer ? 'ក្រុមហ៊ុន Axis Investment Consulting' : 'Axis Investment Consulting'" />
         <div class="brand-text">
           <div class="brand-name">Axis</div>
           <div class="brand-name">Investment</div>
@@ -11,41 +11,41 @@
           <div class="brand-line"></div>
         </div>
       </div>
-      <div class="brand-tagline">FOR A MORE PROSPEROUS FUTURE</div>
+      <div class="brand-tagline">{{ language.isKhmer ? 'ដើម្បីអនាគតកាន់តែរីកចម្រើន' : 'FOR A MORE PROSPEROUS FUTURE' }}</div>
     </header>
 
     <div class="company-section">
       <div class="company-name">{{ company.nameEn || 'Inklusivity' }}</div>
       <div v-if="company.nameKh" class="company-name-kh khmer-text" lang="km">{{ company.nameKh }}</div>
       <div class="company-info">{{ company.address || 'Phnom Penh, Cambodia' }}</div>
-      <div class="company-info">Tel: {{ company.phone || '023 555 888' }}</div>
+      <div class="company-info">{{ language.isKhmer ? 'ទូរស័ព្ទ៖' : 'Tel:' }} {{ company.phone || '023 555 888' }}</div>
       <div v-if="company.vatTin" class="company-info">VAT TIN: {{ company.vatTin }}</div>
     </div>
 
-    <div class="receipt-title">SALES INVOICE</div>
+    <div class="receipt-title">{{ language.isKhmer ? 'វិក្កយបត្រលក់' : 'SALES INVOICE' }}</div>
 
     <!-- Meta / Invoice info -->
     <div class="dash-divider"></div>
     <div class="receipt-meta">
       <div class="meta-row invoice-line">
         <div class="meta-left">
-          <span class="meta-label">Invoice</span>
+          <span class="meta-label">{{ language.isKhmer ? 'វិក្កយបត្រ' : 'Invoice' }}</span>
           <span class="meta-val fw-bold">{{ receiptNo || 'INV-01006' }}</span>
         </div>
         <div class="meta-right">
-          <span class="meta-label">Date</span>
+          <span class="meta-label">{{ language.isKhmer ? 'កាលបរិច្ឆេទ' : 'Date' }}</span>
           <span class="fw-bold">{{ printedAt }}</span>
         </div>
       </div>
       <div class="meta-row cashier-line">
         <div class="meta-left">
-          <span class="meta-label">Cashier</span>
+          <span class="meta-label">{{ language.isKhmer ? 'អ្នកគិតលុយ' : 'Cashier' }}</span>
           <span class="fw-bold">{{ cashierName || 'Admin User' }}</span>
         </div>
       </div>
       <div v-if="customerName" class="meta-row cashier-line">
         <div class="meta-left">
-          <span class="meta-label">Customer</span>
+          <span class="meta-label">{{ language.isKhmer ? 'អតិថិជន' : 'Customer' }}</span>
           <span class="fw-bold">{{ customerName }}</span>
         </div>
       </div>
@@ -56,10 +56,10 @@
     <table class="receipt-items">
       <thead>
         <tr>
-          <th class="col-item">ITEM</th>
-          <th class="col-qty">QTY</th>
-          <th class="col-price">PRICE</th>
-          <th class="col-total">TOTAL</th>
+          <th class="col-item">{{ language.isKhmer ? 'ទំនិញ' : 'ITEM' }}</th>
+          <th class="col-qty">{{ language.isKhmer ? 'ចំនួន' : 'QTY' }}</th>
+          <th class="col-price">{{ language.isKhmer ? 'តម្លៃ' : 'PRICE' }}</th>
+          <th class="col-total">{{ language.isKhmer ? 'សរុប' : 'TOTAL' }}</th>
         </tr>
       </thead>
       <tbody>
@@ -72,8 +72,8 @@
           </tr>
           <tr class="item-detail-row">
             <td colspan="4" class="col-sub">
-              {{ item.uomName || item.unit || 'Unit' }}
-              <template v-if="item.discount"> · Disc ${{ Number(item.discount).toFixed(2) }}</template>
+              {{ item.uomName || item.unit || (language.isKhmer ? 'ឯកតា' : 'Unit') }}
+              <template v-if="item.discount"> · {{ language.isKhmer ? 'បញ្ចុះតម្លៃ' : 'Discount' }} ${{ Number(item.discount).toFixed(2) }}</template>
             </td>
           </tr>
         </template>
@@ -85,11 +85,11 @@
     <!-- Totals -->
     <section class="receipt-summary">
       <div class="summary-row">
-        <span>Net sale</span>
+        <span>{{ language.isKhmer ? 'តម្លៃលក់សុទ្ធ' : 'Net sale' }}</span>
         <strong>${{ Number(netSale).toFixed(2) }}</strong>
       </div>
       <div class="summary-row">
-        <span>VAT ({{ vatRate }}%)</span>
+        <span>{{ language.isKhmer ? 'អាករលើតម្លៃបន្ថែម (VAT)' : 'VAT' }} ({{ vatRate }}%)</span>
         <strong>${{ Number(totalVat).toFixed(2) }}</strong>
       </div>
     </section>
@@ -97,14 +97,14 @@
     <!-- Grand Total with solid top & bottom bars -->
     <div class="grand-total-container">
       <div class="grand-total-row">
-        <span>GRAND TOTAL</span>
+        <span>{{ language.isKhmer ? 'សរុបរួម' : 'GRAND TOTAL' }}</span>
         <span class="grand-total-val">${{ Number(grandTotal).toFixed(2) }}</span>
       </div>
     </div>
 
     <!-- KHR Total -->
     <div class="summary-row khr-row">
-      <span>Total in KHR</span>
+      <span>{{ language.isKhmer ? 'សរុបជារៀល' : 'Total in KHR' }}</span>
       <strong>{{ khrTotal.toLocaleString() }} ៛</strong>
     </div>
 
@@ -113,15 +113,15 @@
     <!-- Payment section -->
     <section class="receipt-summary pt-1">
       <div class="summary-row">
-        <span>Received USD</span>
+        <span>{{ language.isKhmer ? 'ទទួលជាដុល្លារ' : 'Received USD' }}</span>
         <strong>${{ Number(tenderedUSD).toFixed(2) }}</strong>
       </div>
       <div v-if="Number(tenderedKHR) > 0" class="summary-row">
-        <span>Received KHR</span>
+        <span>{{ language.isKhmer ? 'ទទួលជារៀល' : 'Received KHR' }}</span>
         <strong>{{ Math.round(Number(tenderedKHR)).toLocaleString() }} ៛</strong>
       </div>
       <div class="summary-row">
-        <span>Change</span>
+        <span>{{ language.isKhmer ? 'ប្រាក់អាប់' : 'Change' }}</span>
         <strong>${{ Number(changeUSD).toFixed(2) }}</strong>
       </div>
     </section>
@@ -129,17 +129,17 @@
     <div class="dash-divider"></div>
 
     <div v-if="khqrImage" class="receipt-khqr">
-      <img :src="khqrImage" alt="KHQR payment code" />
-      <div>Scan to pay via KHQR</div>
+      <img :src="khqrImage" :alt="language.isKhmer ? 'កូដទូទាត់ KHQR' : 'KHQR payment code'" />
+      <div>{{ language.isKhmer ? 'ស្កេនដើម្បីទូទាត់តាម KHQR' : 'Scan to pay via KHQR' }}</div>
     </div>
 
     <!-- Footer -->
     <footer class="receipt-footer">
-      <div class="thanks">Thank you for your business</div>
+      <div class="thanks">{{ language.isKhmer ? 'សូមអរគុណចំពោះការគាំទ្ររបស់អ្នក' : 'Thank you for your business' }}</div>
       <div class="footer-sub">
         <span class="khmer-text" lang="km">សូមអរគុណ</span>
         <span class="dot">·</span>
-        <span>Powered by INKLUSIVITY</span>
+        <span>{{ language.isKhmer ? 'ដំណើរការដោយ INKLUSIVITY' : 'Powered by INKLUSIVITY' }}</span>
       </div>
     </footer>
   </article>
@@ -148,6 +148,9 @@
 <script setup>
 import { computed } from 'vue';
 import logoUrl from '@/assets/logo.svg';
+import { useLanguageStore } from '@/stores/language';
+
+const language = useLanguageStore();
 
 const props = defineProps({
   company: {
@@ -171,8 +174,8 @@ const props = defineProps({
   tenderedUSD: { type: Number, default: 0 },
   tenderedKHR: { type: Number, default: 0 },
   changeUSD: { type: Number, default: 0 },
-  exchangeRate: { type: Number, default: 4000 }
-  ,khqrImage: { type: String, default: '' }
+  exchangeRate: { type: Number, default: 4000 },
+  khqrImage: { type: String, default: '' }
 });
 
 const printedAt = computed(() => {

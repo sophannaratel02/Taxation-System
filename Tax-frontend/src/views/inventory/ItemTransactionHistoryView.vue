@@ -37,8 +37,8 @@
     <!-- Filters & Table Card (Styled like Sales History Ledger) -->
     <div class="card border-0 shadow-sm">
       <div class="card-header bg-white border-0 py-3">
-        <div class="row g-2">
-          <div class="col-md-6">
+        <div class="row g-2 align-items-end">
+          <div class="col-lg-3 col-md-6">
             <div class="input-group">
               <span class="input-group-text bg-light border-end-0 text-muted">
                 <i class="bi bi-search"></i>
@@ -47,20 +47,48 @@
                 v-model.trim="search"
                 type="text"
                 class="form-control border-start-0 ps-0"
-                :placeholder="language.isKhmer ? 'ស្វែងរកទំនិញ ឬលេខយោង...' : 'Search item or reference...'"
+                maxlength="120"
+                :placeholder="language.isKhmer ? 'ស្វែងរកទំនិញ ចលនា សាខា កាលបរិច្ឆេទ ឬលេខយោង...' : 'Search item, movement, branch, date or reference...'"
+                @input="page = 1"
               />
             </div>
           </div>
 
-          <div class="col-md-4 col-lg-3">
-            <select v-model="movementFilter" class="form-select">
+          <div class="col-lg-2 col-md-3">
+            <select v-model="movementFilter" class="form-select" @change="page = 1">
               <option value="">{{ language.isKhmer ? 'ចលនាទាំងអស់' : 'All movements' }}</option>
               <option value="Sale">{{ language.t('stockIssued') }}</option>
               <option value="Purchase">{{ language.t('stockReceived') }}</option>
+              <option value="Return">{{ language.isKhmer ? 'ត្រឡប់ទំនិញ' : 'Return' }}</option>
               <option value="Adjustment">{{ language.t('stockAdjustment') }}</option>
+              <option value="Transfer">{{ language.isKhmer ? 'ផ្ទេរ' : 'Transfer' }}</option>
             </select>
           </div>
+
+          <div class="col-lg-2 col-md-3">
+            <select v-model="itemFilter" class="form-select" @change="page = 1">
+              <option value="">{{ language.isKhmer ? 'ទំនិញទាំងអស់' : 'All items' }}</option>
+              <option v-for="item in tax.items" :key="item.id" :value="item.id">{{ item.nameEn }}</option>
+            </select>
+          </div>
+          <div class="col-lg-2 col-md-4">
+            <input
+              v-model.trim="branchFilter"
+              class="form-control"
+              :placeholder="language.isKhmer ? 'សាខា' : 'Branch'"
+              @input="page = 1"
+            />
+          </div>
+          <div class="col-lg-1 col-md-4">
+            <label class="form-label small mb-1">{{ language.isKhmer ? 'ចាប់ពី' : 'From' }}</label>
+            <input v-model="startDate" type="date" class="form-control" @change="page = 1" />
+          </div>
+          <div class="col-lg-1 col-md-4">
+            <label class="form-label small mb-1">{{ language.isKhmer ? 'ដល់' : 'To' }}</label>
+            <input v-model="endDate" type="date" class="form-control" @change="page = 1" />
+          </div>
         </div>
+        <div v-if="movementError" class="alert alert-danger mt-3 mb-0" role="alert">{{ movementError }}</div>
       </div>
 
       <!-- Invoices / Transactions Table -->
@@ -71,13 +99,14 @@
               <th class="ps-3">{{ language.t('date') }}</th>
               <th>{{ language.t('item') }}</th>
               <th>{{ language.t('movement') }}</th>
+              <th>{{ language.isKhmer ? 'សាខា' : 'Branch' }}</th>
               <th class="text-end">{{ language.t('quantity') }}</th>
               <th class="text-end">{{ language.t('balance') }}</th>
               <th class="text-center pe-3">{{ language.t('reference') }}</th>
             </tr>
           </thead>
           <tbody>
-            <tr v-for="entry in filteredMovements" :key="entry.id">
+            <tr v-for="entry in movements" :key="entry.id">
               <td class="ps-3 text-nowrap">
                 {{ formatShortDate(entry.date || entry.createdAt) }}
                 <small class="text-muted d-block">{{ formatTime(entry.date || entry.createdAt) }}</small>
@@ -90,6 +119,7 @@
                   {{ formatMovement(entry) }}
                 </span>
               </td>
+              <td>{{ entry.branch }}</td>
               <td 
                 class="text-end fw-medium"
                 :class="Number(entry.qty) < 0 ? 'text-danger' : 'text-success'"
@@ -114,8 +144,11 @@
             </tr>
 
             <!-- Empty Search State -->
-            <tr v-if="!filteredMovements.length">
-              <td colspan="6" class="text-center py-5 text-muted">
+            <tr v-if="loading">
+              <td colspan="7" class="text-center py-4 text-muted">{{ language.t('loading') }}</td>
+            </tr>
+            <tr v-else-if="!movements.length">
+              <td colspan="7" class="text-center py-5 text-muted">
                 <i class="bi bi-inbox fs-2 d-block mb-2 text-secondary"></i>
                 <div>{{ language.t('noRecords') }}</div>
               </td>
@@ -123,12 +156,34 @@
           </tbody>
         </table>
       </div>
+      <div class="card-footer bg-white d-flex flex-wrap justify-content-between align-items-center gap-2">
+        <small class="text-muted">
+          {{ language.isKhmer ? 'សរុប' : 'Total' }}: {{ numberFormatter.format(total) }}
+          · {{ language.isKhmer ? 'ទំព័រ' : 'Page' }} {{ page }} / {{ totalPages }}
+        </small>
+        <div class="d-flex align-items-center gap-2">
+          <select v-model.number="limit" class="form-select form-select-sm" style="width: auto" @change="page = 1">
+            <option :value="25">25</option>
+            <option :value="50">50</option>
+            <option :value="100">100</option>
+            <option :value="250">250</option>
+            <option :value="500">500</option>
+          </select>
+          <button class="btn btn-sm btn-outline-secondary" type="button" :disabled="page <= 1 || loading" @click="page--">
+            {{ language.isKhmer ? 'មុន' : 'Previous' }}
+          </button>
+          <button class="btn btn-sm btn-outline-secondary" type="button" :disabled="page >= totalPages || loading" @click="page++">
+            {{ language.isKhmer ? 'បន្ទាប់' : 'Next' }}
+          </button>
+        </div>
+      </div>
     </div>
   </section>
 </template>
 
 <script setup>
-import { computed, ref } from 'vue';
+import { computed, ref, watch } from 'vue';
+import { api } from '@/services/api';
 import { useTaxStore } from '@/stores/tax';
 import { useLanguageStore } from '@/stores/language';
 
@@ -136,26 +191,74 @@ const tax = useTaxStore();
 const language = useLanguageStore();
 const search = ref('');
 const movementFilter = ref('');
+const itemFilter = ref('');
+const branchFilter = ref('');
+const startDate = ref('');
+const endDate = ref('');
+const page = ref(1);
+const limit = ref(50);
+const total = ref(0);
+const totalPages = ref(0);
+const loading = ref(false);
+const movementError = ref('');
+const movementData = ref([]);
+let requestSequence = 0;
 
-const movements = computed(() => {
-  const list = [...(tax.transactions || [])];
-  return list.sort((a, b) => {
-    const dateA = new Date(String(a.date || a.createdAt || '').replace(' ', 'T')).getTime() || 0;
-    const dateB = new Date(String(b.date || b.createdAt || '').replace(' ', 'T')).getTime() || 0;
-    return dateB - dateA;
-  });
-});
+const movements = computed(() => movementData.value);
 
 const numberFormatter = new Intl.NumberFormat(language.isKhmer ? 'km-KH' : 'en-US');
+const toNumber = (value, fallback = 0) => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+};
+const normalizeMovementData = (rows = []) => {
+  if (!Array.isArray(rows)) return [];
+  return rows.map((entry = {}) => ({
+    ...entry,
+    qty: toNumber(entry.qty),
+    balanceAfter: toNumber(entry.balanceAfter ?? entry.balance_after),
+  }));
+};
 
-const filteredMovements = computed(() => {
-  const query = search.value.toLowerCase();
-  return movements.value.filter((entry) => {
-    const matchesType = !movementFilter.value || String(entry.type || '').toLowerCase() === movementFilter.value.toLowerCase();
-    const searchable = `${entry.item || entry.itemName || ''} ${entry.reference || entry.note || ''}`.toLowerCase();
-    return matchesType && (!query || searchable.includes(query));
-  });
-});
+async function loadMovements() {
+  const sequence = ++requestSequence;
+  loading.value = true;
+  movementError.value = '';
+
+  if (startDate.value && endDate.value && startDate.value > endDate.value) {
+    if (sequence === requestSequence) {
+      movementError.value = language.isKhmer ? 'ថ្ងៃចាប់ផ្តើមមិនអាចនៅក្រោយថ្ងៃបញ្ចប់ទេ។' : 'Start date cannot be later than end date.';
+      movementData.value = [];
+      total.value = 0;
+      totalPages.value = 1;
+      loading.value = false;
+    }
+    return;
+  }
+
+  try {
+    const response = await api.transactions({
+      page: page.value,
+      limit: limit.value,
+      item_id: itemFilter.value,
+      branch: branchFilter.value,
+      startDate: startDate.value,
+      endDate: endDate.value,
+      type: movementFilter.value,
+      search: search.value,
+    });
+    if (sequence !== requestSequence) return;
+    movementData.value = normalizeMovementData(response?.data || []);
+    total.value = toNumber(response?.total, 0);
+    totalPages.value = Math.max(1, toNumber(response?.totalPages, 1));
+  } catch (requestError) {
+    if (sequence === requestSequence) movementError.value = requestError?.message || (language.isKhmer ? 'មិនអាចទាញយកប្រវត្តិចលនាស្តុកបានទេ។' : 'Failed to load stock movements.');
+  } finally {
+    if (sequence === requestSequence) loading.value = false;
+  }
+}
+
+watch([page, limit, itemFilter, branchFilter, startDate, endDate, movementFilter, search], loadMovements, { immediate: true });
 
 function formatShortDate(value) {
   if (!value) return '—';
@@ -186,6 +289,14 @@ function movementBadgeClass(entry) {
 
 function formatMovement(entry) {
   const qty = Number(entry.qty) || 0;
+  const knownTypes = {
+    Return: language.isKhmer ? 'ត្រឡប់ទំនិញ' : 'Return',
+    Sale: language.isKhmer ? 'លក់' : 'Sale',
+    Purchase: language.isKhmer ? 'ទិញចូល' : 'Purchase',
+    Adjustment: language.isKhmer ? 'កែតម្រូវស្តុក' : 'Adjustment',
+    Transfer: language.isKhmer ? 'ផ្ទេរ' : 'Transfer',
+  };
+  if (Object.prototype.hasOwnProperty.call(knownTypes, entry.type)) return knownTypes[entry.type];
   if (entry.type) return entry.type;
   if (qty > 0) return language.t('stockReceived') || 'Received';
   if (qty < 0) return language.t('stockIssued') || 'Issued';
@@ -209,7 +320,7 @@ const stats = computed(() => {
   return [
     { 
       label: language.t('recentMovements'), 
-      value: numberFormatter.format(list.length),
+      value: numberFormatter.format(total.value),
       colorClass: 'text-dark'
     },
     { 
