@@ -19,7 +19,7 @@ afterEach(() => {
   }
 });
 
-test('download requests clear expired credentials and report the standard API error', async () => {
+test('JSON requests clear expired credentials and report the standard API error', async () => {
   const removed = [];
   const dispatched = [];
   Object.defineProperty(globalThis, 'localStorage', {
@@ -45,7 +45,7 @@ test('download requests clear expired credentials and report the standard API er
     json: async () => ({ message: 'Session expired' }),
   });
 
-  await assert.rejects(api.downloadFile(7), (error) => {
+  await assert.rejects(api.settings(), (error) => {
     assert.equal(error.message, 'Session expired');
     assert.equal(error.status, 401);
     assert.deepEqual(error.data, { message: 'Session expired' });
@@ -55,18 +55,18 @@ test('download requests clear expired credentials and report the standard API er
   assert.deepEqual(dispatched, ['auth:unauthorized']);
 });
 
-test('download requests normalize network failures like other API requests', async () => {
+test('API requests normalize network failures', async () => {
   const cause = new Error('connection refused');
   globalThis.fetch = async () => { throw cause; };
 
-  await assert.rejects(api.downloadFile(8), (error) => {
+  await assert.rejects(api.settings(), (error) => {
     assert.match(error.message, /Cannot connect to the API/);
     assert.equal(error.cause, cause);
     return true;
   });
 });
 
-test('JSON requests and downloads expose consistent HTTP error details', async () => {
+test('JSON requests expose HTTP error details when the response is not JSON', async () => {
   globalThis.fetch = async () => ({
     status: 503,
     ok: false,
@@ -79,4 +79,19 @@ test('JSON requests and downloads expose consistent HTTP error details', async (
     assert.equal(error.data, null);
     return true;
   });
+});
+
+test('company deletion sends the confirmed company name in a DELETE request', async () => {
+  let request;
+  globalThis.fetch = async (url, options) => {
+    request = { url, options };
+    return { ok: true, json: async () => ({ ok: true, deleted: true }) };
+  };
+
+  const result = await api.deleteSuperAdminCompany(8, 'Example Workspace');
+
+  assert.deepEqual(result, { ok: true, deleted: true });
+  assert.equal(request.url, '/api/superadmin/companies/8');
+  assert.equal(request.options.method, 'DELETE');
+  assert.deepEqual(JSON.parse(request.options.body), { confirmName: 'Example Workspace' });
 });

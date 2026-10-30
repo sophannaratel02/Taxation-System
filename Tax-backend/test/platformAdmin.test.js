@@ -43,15 +43,17 @@ function databaseConnection(queryHandler, { onRollback = () => {} } = {}) {
 test('platform user routes require Super Admin and company deletion requires the tenant owner', () => {
   const platformPatch = route('/superadmin/users/:id', 'patch');
   const platformDelete = route('/superadmin/users/:id', 'delete');
+  const companyDelete = route('/superadmin/companies/:id', 'delete');
   const transferOptions = route('/superadmin/users/:id/ownership-transfer-options', 'get');
   const platformList = route('/superadmin/users', 'get');
-  const companyDelete = route('/admin/users/:id', 'delete');
+  const tenantUserDelete = route('/admin/users/:id', 'delete');
 
   assert.ok(platformPatch.stack.some((layer) => layer.handle === requireSuperAdmin));
   assert.ok(platformDelete.stack.some((layer) => layer.handle === requireSuperAdmin));
+  assert.ok(companyDelete.stack.some((layer) => layer.handle === requireSuperAdmin));
   assert.ok(transferOptions.stack.some((layer) => layer.handle === requireSuperAdmin));
   assert.ok(platformList.stack.some((layer) => layer.handle === requireSuperAdmin));
-  assert.ok(companyDelete.stack.some((layer) => layer.handle === requireOwner));
+  assert.ok(tenantUserDelete.stack.some((layer) => layer.handle === requireOwner));
   assert.equal(route('/admin/users/:id', 'delete').stack.some((layer) => layer.handle === requireSuperAdmin), false);
 });
 
@@ -176,6 +178,7 @@ test('platform overview paginates and filters companies while retaining global s
       totalPages: 5,
       summary: { totalCompanies: 41, totalUsers: 120, totalOwners: 52 },
     });
+
     assert.match(statements[0].sql, /enterprise_name LIKE \? ESCAPE '!'/);
     assert.deepEqual(statements[0].parameters, ['%Example%']);
     assert.match(statements[1].sql, /LIMIT \? OFFSET \?/);
@@ -188,6 +191,142 @@ test('platform overview paginates and filters companies while retaining global s
   }
 });
 
+    test('company deletion requires exact confirmation before changing the database', async () => {
+      const handler = routeHandler('/superadmin/companies/:id', 'delete');
+      const originalGetConnection = pool.getConnection;
+      const statements = [];
+      let rollbackCount = 0;
+      pool.getConnection = async () => databaseConnection(async (sql, parameters = []) => {
+        statements.push({ sql, parameters });
+        if (sql.includes('FROM companies WHERE id = ? FOR UPDATE')) {
+          return [[{ id: 8, enterprise_name: 'Example Workspace' }]];
+        }
+        throw new Error(`Unexpected query: ${sql}`);
+      }, { onRollback: () => { rollbackCount += 1; } });
+
+      try {
+        const response = responseRecorder();
+        await handler(
+          { params: { id: '8' }, body: { confirmName: 'Different Workspace' }, user: { id: 10 } },
+          response,
+          (error) => { throw error; }
+        );
+
+        assert.equal(response.statusCode, 400);
+        assert.match(response.body.message, /confirmation does not match/);
+        assert.equal(rollbackCount, 1);
+        assert.equal(statements.some(({ sql }) => sql.startsWith('DELETE')), false);
+      } finally {
+        pool.getConnection = originalGetConnection;
+      }
+    });
+
+    test('company deletion removes scoped tables in foreign-key order and audits the deletion', async () => {
+      const handler = routeHandler('/superadmin/companies/:id', 'delete');
+      const originalGetConnection = pool.getConnection;
+      const statements = [];
+      let chartDeleteCount = 0;
+      pool.getConnection = async () => databaseConnection(async (sql, parameters = []) => {
+        statements.push({ sql, parameters });
+        if (sql.includes('FROM companies WHERE id = ? FOR UPDATE')) {
+          return [[{ id: 8, enterprise_name: 'Example Workspace' }]];
+        }
+        if (sql.includes('information_schema.COLUMNS columnInfo')) {
+          return [[
+            { TABLE_NAME: 'items' },
+            { TABLE_NAME: 'invoice_lines' },
+            { TABLE_NAME: 'journal_entries' },
+            { TABLE_NAME: 'journal_entry_lines' },
+            { TABLE_NAME: 'chart_of_accounts' },
+            { TABLE_NAME: 'users' },
+          ]];
+        }
+        if (sql.includes('information_schema.KEY_COLUMN_USAGE k')) {
+          return [[
+            {
+              TABLE_NAME: 'invoice_lines',
+              COLUMN_NAME: 'item_id',
+              CONSTRAINT_NAME: 'fk_invoice_lines_item',
+              REFERENCED_TABLE_NAME: 'items',
+              REFERENCED_COLUMN_NAME: 'id',
+              DELETE_RULE: 'RESTRICT',
+            },
+            {
+              TABLE_NAME: 'journal_entry_lines',
+              COLUMN_NAME: 'journal_entry_id',
+              CONSTRAINT_NAME: 'fk_lines_entry',
+              REFERENCED_TABLE_NAME: 'journal_entries',
+              REFERENCED_COLUMN_NAME: 'id',
+              DELETE_RULE: 'CASCADE',
+            },
+            {
+              TABLE_NAME: 'journal_entry_lines',
+              COLUMN_NAME: 'account_id',
+              CONSTRAINT_NAME: 'fk_lines_account',
+              REFERENCED_TABLE_NAME: 'chart_of_accounts',
+              REFERENCED_COLUMN_NAME: 'id',
+              DELETE_RULE: 'RESTRICT',
+            },
+            {
+              TABLE_NAME: 'chart_of_accounts',
+              COLUMN_NAME: 'parent_id',
+              CONSTRAINT_NAME: 'fk_accounts_parent',
+              REFERENCED_TABLE_NAME: 'chart_of_accounts',
+              REFERENCED_COLUMN_NAME: 'id',
+              DELETE_RULE: 'RESTRICT',
+            },
+          ]];
+        }
+        if (sql.startsWith('DELETE parent FROM `chart_of_accounts`')) {
+          chartDeleteCount += 1;
+          return [{ affectedRows: chartDeleteCount === 1 ? 2 : 0 }];
+        }
+        if (sql.startsWith('SELECT COUNT(*) AS remaining FROM `chart_of_accounts`')) {
+          return [[{ remaining: 0 }]];
+        }
+        if (sql.startsWith('DELETE FROM companies')) return [{ affectedRows: 1 }];
+        if (sql.includes('INSERT INTO platform_activity_logs')) return [{ affectedRows: 1 }];
+        if (sql.startsWith('DELETE FROM') || sql.startsWith('DELETE parent FROM')) {
+          return [{ affectedRows: 1 }];
+        }
+        throw new Error(`Unexpected query: ${sql}`);
+      });
+
+      try {
+        const response = responseRecorder();
+        await handler(
+          { params: { id: '8' }, body: { confirmName: 'Example Workspace' }, user: { id: 10 } },
+          response,
+          (error) => { throw error; }
+        );
+
+        assert.deepEqual(response.body, {
+          ok: true,
+          deleted: true,
+          companyId: 8,
+          companyName: 'Example Workspace',
+        });
+        const deletionStatements = statements
+          .filter(({ sql }) => sql.startsWith('DELETE FROM') || sql.startsWith('DELETE parent FROM'));
+        const deletionPosition = (table) => deletionStatements.findIndex(({ sql }) => (
+          sql.includes(`\`${table}\``) || sql.startsWith(`DELETE FROM ${table}`)
+        ));
+        assert.ok(deletionPosition('invoice_lines') < deletionPosition('items'));
+        assert.ok(deletionPosition('journal_entry_lines') < deletionPosition('journal_entries'));
+        assert.ok(deletionPosition('journal_entry_lines') < deletionPosition('chart_of_accounts'));
+        assert.ok(deletionPosition('users') >= 0);
+        assert.ok(deletionPosition('companies') > deletionPosition('users'));
+        assert.ok(statements.some(({ sql, parameters }) => (
+          sql.includes('INSERT INTO platform_activity_logs')
+          && parameters[1] === 'platform_company_deleted'
+          && parameters[2] === 'company'
+          && parameters[3] === 8
+        )));
+        assert.equal(chartDeleteCount, 2);
+      } finally {
+        pool.getConnection = originalGetConnection;
+      }
+    });
 test('platform overview rejects invalid pagination before querying', async () => {
   const handler = routeHandler('/superadmin/overview', 'get');
   const originalQuery = pool.query;

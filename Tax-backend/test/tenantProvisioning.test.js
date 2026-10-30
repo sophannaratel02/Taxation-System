@@ -14,7 +14,7 @@ const {
   TENANT_UNIQUE_KEYS,
 } = require('../src/services/tenantMigration');
 
-test('company provisioning creates only company-scoped starter rows', async () => {
+test('new company provisioning starts with no items or units of measure', async () => {
   const statements = [];
   const connection = {
     async query(sql, params) {
@@ -43,6 +43,8 @@ test('company provisioning creates only company-scoped starter rows', async () =
   ]);
   assert.match(statements[1].sql, /INSERT INTO company_settings/);
   assert.ok(statements.every(({ sql }) => !/INSERT INTO (chart_of_accounts|fixed_asset_classes|company_tax_rates|categories|invoices|invoice_lines|journal_entries|journal_entry_lines|items|customers|vendors|purchase_orders|sale_records|purchase_records)\b/i.test(sql)));
+  assert.equal(statements.some(({ sql }) => /INSERT INTO items\b/i.test(sql)), false);
+  assert.equal(statements.some(({ sql }) => /units\s*(?:,|\))/i.test(sql)), false);
 });
 
 test('startup seeds branch access with an explicit company ID', async () => {

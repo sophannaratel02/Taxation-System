@@ -1,6 +1,4 @@
 const express = require('express');
-const fs = require('fs/promises');
-const path = require('path');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const QRCode = require('qrcode');
@@ -16,7 +14,6 @@ const {
   requireOwner: ownerOnly,
   requireSuperAdmin: superAdminOnly,
 } = require('../middleware/auth');
-const { uploadsDirectory, uploadSingleDocument } = require('../middleware/uploadDocument');
 const {
   assertBranchAccess,
   getAuthorizedBranches,
@@ -282,6 +279,122 @@ async function logPlatformActivity(connection, userId, action, entityType, entit
     'INSERT INTO platform_activity_logs (user_id, action, entity_type, entity_id, details) VALUES (?, ?, ?, ?, ?)',
     [userId, action, entityType, entityId || null, JSON.stringify(details)]
   );
+}
+
+async function deleteCompanyWorkspaceData(connection, companyId) {
+  const [tableRows] = await connection.query(
+    `SELECT DISTINCT columnInfo.TABLE_NAME
+     FROM information_schema.COLUMNS columnInfo
+     JOIN information_schema.TABLES tableInfo
+       ON tableInfo.TABLE_SCHEMA = columnInfo.TABLE_SCHEMA
+       AND tableInfo.TABLE_NAME = columnInfo.TABLE_NAME
+     WHERE columnInfo.TABLE_SCHEMA = DATABASE()
+       AND columnInfo.COLUMN_NAME = 'company_id'
+       AND tableInfo.TABLE_TYPE = 'BASE TABLE'
+       AND columnInfo.TABLE_NAME <> 'companies'`
+  );
+  const tables = tableRows.map((row) => row.TABLE_NAME);
+  if (tables.some((table) => !/^[a-z0-9_]+$/i.test(table))) {
+    throw new Error('Cannot safely delete workspace data because a database table name is invalid.');
+  }
+  if (!tables.length) return;
+
+  const placeholders = tables.map(() => '?').join(', ');
+  const [foreignKeys] = await connection.query(
+    `SELECT k.TABLE_NAME, k.COLUMN_NAME, k.CONSTRAINT_NAME, k.REFERENCED_TABLE_NAME,
+       k.REFERENCED_COLUMN_NAME, r.DELETE_RULE
+     FROM information_schema.KEY_COLUMN_USAGE k
+     JOIN information_schema.REFERENTIAL_CONSTRAINTS r
+       ON r.CONSTRAINT_SCHEMA = k.CONSTRAINT_SCHEMA
+       AND r.TABLE_NAME = k.TABLE_NAME
+       AND r.CONSTRAINT_NAME = k.CONSTRAINT_NAME
+     WHERE k.CONSTRAINT_SCHEMA = DATABASE()
+       AND k.REFERENCED_TABLE_NAME IS NOT NULL
+       AND k.TABLE_NAME IN (${placeholders})
+       AND k.REFERENCED_TABLE_NAME IN (${placeholders})
+     ORDER BY k.TABLE_NAME, k.CONSTRAINT_NAME, k.ORDINAL_POSITION`,
+    [...tables, ...tables]
+  );
+
+  const scopedTables = new Set(tables);
+  const parentTables = new Map(tables.map((table) => [table, new Set()]));
+  const restrictiveSelfReferences = new Map();
+  for (const foreignKey of foreignKeys) {
+    if (foreignKey.TABLE_NAME === foreignKey.REFERENCED_TABLE_NAME) {
+      if (foreignKey.DELETE_RULE === 'RESTRICT' || foreignKey.DELETE_RULE === 'NO ACTION') {
+        const key = `${foreignKey.TABLE_NAME}:${foreignKey.CONSTRAINT_NAME}`;
+        if (!restrictiveSelfReferences.has(key)) {
+          restrictiveSelfReferences.set(key, {
+            table: foreignKey.TABLE_NAME,
+            columns: [],
+          });
+        }
+        restrictiveSelfReferences.get(key).columns.push({
+          child: foreignKey.COLUMN_NAME,
+          parent: foreignKey.REFERENCED_COLUMN_NAME,
+        });
+      }
+      continue;
+    }
+
+    parentTables.get(foreignKey.TABLE_NAME).add(foreignKey.REFERENCED_TABLE_NAME);
+  }
+
+  const pendingChildren = new Map(tables.map((table) => [table, 0]));
+  for (const referencedTables of parentTables.values()) {
+    for (const parent of referencedTables) {
+      pendingChildren.set(parent, pendingChildren.get(parent) + 1);
+    }
+  }
+  const readyTables = tables.filter((table) => pendingChildren.get(table) === 0);
+  const deletionOrder = [];
+  while (readyTables.length) {
+    const table = readyTables.shift();
+    deletionOrder.push(table);
+    for (const parent of parentTables.get(table)) {
+      const remainingChildren = pendingChildren.get(parent) - 1;
+      pendingChildren.set(parent, remainingChildren);
+      if (remainingChildren === 0) readyTables.push(parent);
+    }
+  }
+  if (deletionOrder.length !== scopedTables.size) {
+    throw new Error('Cannot safely delete workspace data because tenant tables have cyclic foreign-key dependencies.');
+  }
+
+  for (const table of deletionOrder) {
+    const selfReferences = [...restrictiveSelfReferences.values()]
+      .filter((reference) => reference.table === table);
+    if (!selfReferences.length) {
+      await connection.query(`DELETE FROM \`${table}\` WHERE company_id = ?`, [companyId]);
+      continue;
+    }
+
+    const joins = selfReferences.map((reference, index) => {
+      const conditions = reference.columns
+        .map(({ child, parent }) => `child${index}.\`${child}\` = parent.\`${parent}\``)
+        .join(' AND ');
+      return `LEFT JOIN \`${table}\` child${index} ON ${conditions}`;
+    }).join(' ');
+    const noChildren = selfReferences
+      .map((reference, index) => `child${index}.\`${reference.columns[0].child}\` IS NULL`)
+      .join(' AND ');
+
+    while (true) {
+      const [result] = await connection.query(
+        `DELETE parent FROM \`${table}\` parent ${joins}
+         WHERE parent.company_id = ? AND ${noChildren}`,
+        [companyId]
+      );
+      if (!result.affectedRows) break;
+    }
+    const [[remainingRows]] = await connection.query(
+      `SELECT COUNT(*) AS remaining FROM \`${table}\` WHERE company_id = ?`,
+      [companyId]
+    );
+    if (Number(remainingRows.remaining) > 0) {
+      throw new Error(`Cannot safely delete workspace data because ${table} contains a self-referencing cycle.`);
+    }
+  }
 }
 
 async function lockSuperAdminAccounts(connection) {
@@ -661,7 +774,7 @@ api.post('/auth/login', async (req, res, next) => {
 
 api.get('/users', auth, ownerOnly, async (req, res, next) => {
   try {
-    const [rows] = await pool.query("SELECT id, name, username, email, role, active, is_owner, permissions, created_by_user_id FROM users WHERE company_id = ? AND LOWER(role) = 'staff' ORDER BY name", [req.companyId]);
+    const [rows] = await pool.query("SELECT id, name, position, username, email, role, active, is_owner, permissions, created_by_user_id FROM users WHERE company_id = ? AND LOWER(role) = 'staff' ORDER BY name", [req.companyId]);
     res.json(await addUserBranches(pool, rows, req.companyId));
   } catch (error) {
     next(error);
@@ -672,6 +785,7 @@ api.post('/users', auth, ownerOnly, async (req, res, next) => {
   const connection = await pool.getConnection();
   try {
     const { name, username, email, password } = req.body;
+    const position = String(req.body.position || '').trim() || null;
     const role = 'staff';
     const permissions = prepareStaffPermissions(
       req.body.preset || req.body.permissions?.preset || 'cashier',
@@ -684,6 +798,9 @@ api.post('/users', auth, ownerOnly, async (req, res, next) => {
         message: `Name, username, valid recovery email, and a password of at least ${accessPolicy.passwordMinLength} characters are required`,
       });
     }
+    if (position && position.length > 160) {
+      return res.status(400).json({ message: 'Position cannot exceed 160 characters' });
+    }
     const branches = normalizeBranchAccess(
       req.body.branches === undefined ? [await defaultBranchForUser(connection, req.companyId)] : req.body.branches,
       role
@@ -695,8 +812,8 @@ api.post('/users', auth, ownerOnly, async (req, res, next) => {
     const companyId = req.companyId;
     const [result] = await connection.query(
       `INSERT INTO users
-        (name, username, email, password_hash, role, company_id, created_by_user_id, permissions)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        (name, username, email, password_hash, role, company_id, created_by_user_id, permissions, position)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         name.trim(),
         username.trim(),
@@ -706,6 +823,7 @@ api.post('/users', auth, ownerOnly, async (req, res, next) => {
         companyId,
         req.user.id,
         JSON.stringify(permissions),
+        position,
       ]
     );
     await saveUserBranches(connection, result.insertId, companyId, branches);
@@ -714,6 +832,7 @@ api.post('/users', auth, ownerOnly, async (req, res, next) => {
     res.status(201).json({
       id: result.insertId,
       name: name.trim(),
+      position,
       username: username.trim(),
       email: recoveryEmail,
       role,
@@ -741,7 +860,7 @@ api.get('/me', auth, async (req, res, next) => {
 
 api.get('/admin/users', auth, ownerOnly, async (req, res, next) => {
   try {
-    const [rows] = await pool.query("SELECT id, name, username, email, role, active, created_at, is_owner, permissions, created_by_user_id FROM users WHERE company_id = ? AND LOWER(role) = 'staff' ORDER BY created_at DESC", [req.companyId]);
+    const [rows] = await pool.query("SELECT id, name, position, username, email, role, active, created_at, is_owner, permissions, created_by_user_id FROM users WHERE company_id = ? AND LOWER(role) = 'staff' ORDER BY created_at DESC", [req.companyId]);
     res.json(await addUserBranches(pool, rows, req.companyId));
   } catch (error) {
     next(error);
@@ -767,6 +886,12 @@ api.patch('/admin/users/:id', auth, ownerOnly, async (req, res, next) => {
       if (!String(req.body.name).trim()) return res.status(400).json({ message: 'Name cannot be empty' });
       updates.push('name = ?');
       values.push(String(req.body.name).trim());
+    }
+    if (req.body.position !== undefined) {
+      const position = String(req.body.position || '').trim();
+      if (position.length > 160) return res.status(400).json({ message: 'Position cannot exceed 160 characters' });
+      updates.push('position = ?');
+      values.push(position || null);
     }
     if (req.body.email !== undefined) {
       const recoveryEmail = String(req.body.email || '').trim().toLowerCase();
@@ -826,7 +951,7 @@ api.patch('/admin/users/:id', auth, ownerOnly, async (req, res, next) => {
     transactionStarted = true;
     await connection.query(`UPDATE users SET ${updates.join(', ')} WHERE id = ? AND company_id = ?`, [...values, req.companyId]);
     if (branches) await saveUserBranches(connection, userId, req.companyId, branches);
-    const [updatedRows] = await connection.query('SELECT id, name, username, email, role, active, created_at, is_owner, permissions FROM users WHERE id = ? AND company_id = ?', [userId, req.companyId]);
+    const [updatedRows] = await connection.query('SELECT id, name, position, username, email, role, active, created_at, is_owner, permissions FROM users WHERE id = ? AND company_id = ?', [userId, req.companyId]);
     if (!updatedRows[0]) {
       await connection.rollback();
       transactionStarted = false;
@@ -1389,6 +1514,56 @@ api.get('/superadmin/overview', auth, superAdminOnly, async (req, res, next) => 
     res.json({ companies, totalCount, page, totalPages, summary });
   } catch (error) {
     next(error);
+  }
+});
+
+api.delete('/superadmin/companies/:id', auth, superAdminOnly, async (req, res, next) => {
+  let connection;
+  let transactionStarted = false;
+  try {
+    const companyId = Number(req.params.id);
+    if (!Number.isSafeInteger(companyId) || companyId < 1) {
+      return res.status(400).json({ message: 'Invalid company id.' });
+    }
+
+    connection = await pool.getConnection();
+    await connection.beginTransaction();
+    transactionStarted = true;
+    const [companies] = await connection.query(
+      'SELECT id, enterprise_name FROM companies WHERE id = ? FOR UPDATE',
+      [companyId]
+    );
+    const company = companies[0];
+    if (!company) {
+      await connection.rollback();
+      transactionStarted = false;
+      return res.status(404).json({ message: 'Company not found.' });
+    }
+
+    if (String(req.body?.confirmName || '').trim() !== String(company.enterprise_name).trim()) {
+      await connection.rollback();
+      transactionStarted = false;
+      return res.status(400).json({ message: 'Company name confirmation does not match.' });
+    }
+
+    await deleteCompanyWorkspaceData(connection, companyId);
+    const [deleted] = await connection.query('DELETE FROM companies WHERE id = ?', [companyId]);
+    if (deleted.affectedRows !== 1) {
+      throw new Error('The company workspace could not be deleted.');
+    }
+
+    await logPlatformActivity(connection, req.user.id, 'platform_company_deleted', 'company', companyId, {
+      companyName: company.enterprise_name,
+      workspaceDataDeleted: true,
+    });
+    await connection.commit();
+    transactionStarted = false;
+    res.json({ ok: true, deleted: true, companyId, companyName: company.enterprise_name });
+  } catch (error) {
+    if (connection && transactionStarted) await connection.rollback();
+    next(error);
+  } finally {
+    connection?.release();
   }
 });
 
@@ -4403,65 +4578,6 @@ api.get('/files', auth, async (req, res, next) => {
       [req.companyId, req.user.id]
     );
     res.json(rows);
-  } catch (error) {
-    next(error);
-  }
-});
-
-api.post('/files', auth, uploadSingleDocument, async (req, res, next) => {
-  const file = req.file;
-  if (!file) return res.status(400).json({ message: 'Choose a document to upload.' });
-
-  let connection;
-  try {
-    connection = await pool.getConnection();
-    await connection.beginTransaction();
-    const fileName = path.basename(file.originalname).slice(0, 255) || 'document';
-    const [result] = await connection.query(
-      `INSERT INTO project_files (project_id, file_name, file_url, file_size, mime_type, submitted_by)
-       VALUES (NULL, ?, ?, ?, ?, ?)`,
-      [fileName, file.filename, file.size, file.mimetype, req.user.id]
-    );
-    const reviewers = await getCompanyReviewers(connection, req.companyId);
-    for (const reviewer of reviewers) {
-      await notify(connection, reviewer.id, 'file_submitted', 'New file submitted', `${req.user.name} submitted ${fileName}`, 'file', result.insertId);
-    }
-    await logActivity(connection, req.user.id, 'file_submitted', 'file', result.insertId, { fileName });
-    await connection.commit();
-    res.status(201).json({
-      id: result.insertId,
-      file_name: fileName,
-      file_size: file.size,
-      mime_type: file.mimetype,
-      status: 'Pending Approval',
-    });
-  } catch (error) {
-    await connection.rollback().catch(() => {});
-    await fs.unlink(file.path).catch(() => {});
-    next(error);
-  } finally {
-    connection?.release();
-  }
-});
-
-api.get('/files/:id/download', auth, async (req, res, next) => {
-  try {
-    const [rows] = await pool.query('SELECT id, file_name, file_url, submitted_by FROM project_files WHERE id = ? AND company_id = ? LIMIT 1', [req.params.id, req.companyId]);
-    const file = rows[0];
-    if (!file) return res.status(404).json({ message: 'File not found.' });
-    if (!hasPermission(req.user, 'approvals.manage') && Number(file.submitted_by) !== Number(req.user.id)) {
-      return res.status(403).json({ message: 'You cannot access this file.' });
-    }
-    if (!file.file_url) return res.status(404).json({ message: 'This record has no uploaded file.' });
-
-    const storedName = path.basename(file.file_url);
-    const filePath = path.join(uploadsDirectory, storedName);
-    res.download(filePath, path.basename(file.file_name), (error) => {
-      if (error && !res.headersSent) {
-        if (error.code === 'ENOENT') return res.status(404).json({ message: 'Uploaded file is missing from storage.' });
-        next(error);
-      }
-    });
   } catch (error) {
     next(error);
   }

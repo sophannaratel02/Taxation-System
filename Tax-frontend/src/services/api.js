@@ -48,10 +48,8 @@ function buildQuery(params = {}) {
 }
 
 async function request(path, options = {}) {
-  const isFormData = typeof FormData !== 'undefined' && options.body instanceof FormData;
-
   const headers = {
-    ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
+    'Content-Type': 'application/json',
     ...getAuthHeader(),
     ...(options.headers || {})
   };
@@ -69,56 +67,17 @@ async function request(path, options = {}) {
 const get = (path, query, headers) =>
   request(`${path}${buildQuery(query)}`, { method: 'GET', headers });
 
-const sendWithBody = (method, path, body, headers = {}) => {
-  const isFormData = typeof FormData !== 'undefined' && body instanceof FormData;
-  return request(path, {
+const sendWithBody = (method, path, body, headers = {}) =>
+  request(path, {
     method,
-    body: isFormData || body === undefined ? body : JSON.stringify(body),
+    body: body === undefined ? undefined : JSON.stringify(body),
     headers
   });
-};
 
 const post = (path, body, headers) => sendWithBody('POST', path, body, headers);
 const put = (path, body, headers) => sendWithBody('PUT', path, body, headers);
 const patch = (path, body, headers) => sendWithBody('PATCH', path, body, headers);
 const del = (path, headers) => request(path, { method: 'DELETE', headers });
-
-// ============================================================================
-// File Download Handler
-// ============================================================================
-
-async function downloadFile(id) {
-  const response = await fetchResponse(`${API_URL}/files/${param(id)}/download`, {
-    headers: getAuthHeader()
-  });
-  handleUnauthorized(response);
-
-  if (!response.ok) {
-    throw await responseError(response, 'Download failed');
-  }
-
-  let filename = `document-${id}`;
-  const disposition = response.headers.get('Content-Disposition');
-  if (disposition) {
-    const rfcMatch = disposition.match(/filename\*=UTF-8''([^;]+)/i);
-    const standardMatch = disposition.match(/filename="?([^";]+)"?/i);
-    if (rfcMatch?.[1]) {
-      filename = decodeURIComponent(rfcMatch[1].trim());
-    } else if (standardMatch?.[1]) {
-      filename = standardMatch[1].trim();
-    }
-  }
-
-  const blob = await response.blob();
-  const objectUrl = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = objectUrl;
-  link.download = filename;
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-  window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
-}
 
 // ============================================================================
 // API Client Interface
@@ -239,12 +198,6 @@ export const api = {
   saveProject: (project) => post('/projects', project),
   projectFiles: (projectId) => get(`/projects/${param(projectId)}/files`),
   userFiles: () => get('/files'),
-  uploadUserFile: (file) => {
-    const body = new FormData();
-    body.append('file', file);
-    return post('/files', body);
-  },
-  downloadFile,
 
   // HR & Notifications
   leaveRequests: () => get('/leave-requests'),
@@ -255,6 +208,11 @@ export const api = {
   // Admin
   superAdminOverview: (query) => get('/superadmin/overview', query),
   superAdminUsers: (query) => get('/superadmin/users', query),
+  deleteSuperAdminCompany: (id, confirmName) => sendWithBody(
+    'DELETE',
+    `/superadmin/companies/${param(id)}`,
+    { confirmName }
+  ),
   superAdminOwnershipTransferOptions: (id) => get(`/superadmin/users/${param(id)}/ownership-transfer-options`),
   updateSuperAdminUser: (id, changes) => patch(`/superadmin/users/${param(id)}`, changes),
   deleteSuperAdminUser: (id, transferToUserId) => sendWithBody(

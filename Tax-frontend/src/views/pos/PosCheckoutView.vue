@@ -11,7 +11,7 @@
           {{ language.isKhmer ? 'លក់ទំនិញ' : 'Sales Register' }}
         </h1>
         <p class="text-muted mb-0">
-          {{ language.t('scanSearch') }}
+          {{ language.isKhmer ? 'ស្វែងរកទំនិញដើម្បីចាប់ផ្តើមលក់' : '  search the catalog to start a sale.' }}
         </p>
       </div>
 
@@ -656,7 +656,7 @@ const maxDiscountPercent = computed(() => {
 
 const paymentMethods = computed(() => [
   { value: 'cash', label: language.t('cash'), icon: 'bi bi-cash-stack' },
-  { value: 'bank', label: language.t('cardQr'), icon: 'bi bi-qr-code-scan' },
+  // { value: 'bank', label: language.t('cardQr'), icon: 'bi bi-qr-code-scan' },
   { value: 'customer_account', label: language.t('account'), icon: 'bi bi-person-vcard' },
 ]);
 

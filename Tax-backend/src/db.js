@@ -27,7 +27,7 @@ const dbConfig = {
 const databasePool = mysql.createPool({
   ...dbConfig,
   waitForConnections: true,
-  connectionLimit: 10,
+  connectionLimit: 30,
   decimalNumbers: true,
   multipleStatements: true,
 });
@@ -187,19 +187,19 @@ async function addForeignKeyIfMissing(tableName, constraintName, clause) {
   }
 }
 
-async function migrateUserRoleModel() {
-  await pool.query(
+async function migrateUserRoleModel(database = pool) {
+  await database.query(
     `UPDATE companies company
      JOIN users platform_admin ON platform_admin.id = company.owner_user_id
      SET company.owner_user_id = NULL
      WHERE LOWER(platform_admin.role) = 'superadmin'`
   );
-  await pool.query(
+  await database.query(
     `UPDATE users
      SET is_owner = 0
      WHERE LOWER(role) = 'superadmin'`
   );
-  await pool.query(
+  await database.query(
     `UPDATE companies company
      JOIN users tenant_owner
        ON tenant_owner.company_id = company.id
@@ -208,7 +208,7 @@ async function migrateUserRoleModel() {
      SET company.owner_user_id = tenant_owner.id
      WHERE company.owner_user_id IS NULL`
   );
-  await pool.query(
+  await database.query(
     `UPDATE users tenant_user
      JOIN companies company ON company.id = tenant_user.company_id
      SET tenant_user.is_owner = 0
@@ -218,7 +218,7 @@ async function migrateUserRoleModel() {
        AND company.owner_user_id <> tenant_user.id`
   );
 
-  const [unownedCompanies] = await pool.query(
+  const [unownedCompanies] = await database.query(
     `SELECT company.id
      FROM companies company
      WHERE company.owner_user_id IS NULL
@@ -231,11 +231,23 @@ async function migrateUserRoleModel() {
   );
   const ownerlessNames = [];
   for (const company of unownedCompanies) {
-    const [candidates] = await pool.query(
-      `SELECT id FROM users
-       WHERE company_id = ? AND LOWER(role) = 'admin'
+    const [candidates] = await database.query(
+      `SELECT id FROM users candidate
+       WHERE company_id = ?
+         AND (
+           LOWER(role) = 'admin'
+           OR (
+             LOWER(role) = 'staff'
+             AND JSON_UNQUOTE(JSON_EXTRACT(permissions, '$.preset')) = 'manager'
+           )
+         )
+         AND is_owner = 0
          AND active = 1 AND status = 'ACTIVE' AND approval_status = 'approved'
-       ORDER BY id LIMIT 1`,
+         AND NOT EXISTS (
+           SELECT 1 FROM companies owned WHERE owned.owner_user_id = candidate.id
+         )
+       ORDER BY CASE WHEN LOWER(role) = 'admin' THEN 0 ELSE 1 END, id
+       LIMIT 1`,
       [company.id]
     );
     if (!candidates.length) {
@@ -243,11 +255,19 @@ async function migrateUserRoleModel() {
       continue;
     }
 
-    await pool.query('UPDATE companies SET owner_user_id = ? WHERE id = ?', [candidates[0].id, company.id]);
-    await pool.query('UPDATE users SET is_owner = 1 WHERE id = ?', [candidates[0].id]);
+    const [result] = await database.query(
+      'UPDATE companies SET owner_user_id = ? WHERE id = ? AND owner_user_id IS NULL',
+      [candidates[0].id, company.id]
+    );
+    if (result.affectedRows) {
+      await database.query(
+        "UPDATE users SET role = 'owner', is_owner = 1, permissions = NULL WHERE id = ?",
+        [candidates[0].id]
+      );
+    }
   }
 
-  await pool.query(
+  await database.query(
     `UPDATE users user
      SET user.role = 'owner', user.is_owner = 1, user.permissions = NULL
      WHERE LOWER(user.role) <> 'superadmin'
@@ -256,30 +276,30 @@ async function migrateUserRoleModel() {
          OR EXISTS (SELECT 1 FROM companies company WHERE company.owner_user_id = user.id)
        )`
   );
-  await pool.query(
+  await database.query(
     `UPDATE users
      SET role = 'staff', permissions = ?
      WHERE LOWER(role) = 'admin'`,
     [JSON.stringify({ preset: 'manager', grants: STAFF_PRESETS.manager })]
   );
-  await pool.query(
+  await database.query(
     `UPDATE users
      SET role = 'staff', permissions = ?
      WHERE LOWER(role) = 'user' AND permissions IS NULL`,
     [JSON.stringify({ preset: 'cashier', grants: STAFF_PRESETS.cashier })]
   );
-  await pool.query(
+  await database.query(
     `UPDATE users
      SET role = 'staff', permissions = ?
      WHERE LOWER(role) NOT IN ('superadmin', 'owner', 'staff')`,
     [JSON.stringify({ preset: 'cashier', grants: STAFF_PRESETS.cashier })]
   );
-  await pool.query("ALTER TABLE users MODIFY COLUMN role ENUM('superadmin','owner','staff') NOT NULL DEFAULT 'staff'");
+  await database.query("ALTER TABLE users MODIFY COLUMN role ENUM('superadmin','owner','staff') NOT NULL DEFAULT 'staff'");
 
   if (ownerlessNames.length) {
     console.warn(
-      `[database] Company workspace(s) ${ownerlessNames.join(', ')} have no active Admin to promote as owner. ` +
-      'Assign an owner account before granting access to these workspaces.'
+      `[database] Company workspace(s) ${ownerlessNames.join(', ')} have no eligible active manager to promote as owner. ` +
+      'Assign an active, approved owner account before granting access to these workspaces.'
     );
   }
 }
@@ -890,7 +910,6 @@ async function initializeDatabaseSchema() {
 
   // 3. Seed Vendors
   const [vendors] = await pool.query('SELECT id, name FROM vendors WHERE company_id = ?', [startupTenantCompanyId]);
-  let vendorMap = new Map(vendors.map(v => [v.name, v.id]));
 
   if (vendors.length === 0) {
     const defaultVendors = [
@@ -900,11 +919,10 @@ async function initializeDatabaseSchema() {
     ];
 
     for (const v of defaultVendors) {
-      const [res] = await pool.query(
+      await pool.query(
         'INSERT INTO vendors (name, phone, credit_limit, note, company_id) VALUES (?, ?, ?, ?, ?)',
         [...v, startupTenantCompanyId]
       );
-      vendorMap.set(v[0], res.insertId);
     }
   }
 
@@ -919,99 +937,6 @@ async function initializeDatabaseSchema() {
     );
   }
 
-  // 5. Seed Items (Safely mapping vendor IDs from vendorMap)
-  const [items] = await pool.query('SELECT id FROM items WHERE company_id = ? LIMIT 1', [startupTenantCompanyId]);
-  if (items.length === 0) {
-    const bevVendorId = vendorMap.get('Cambodia Beverage Co.') || null;
-    const foodVendorId = vendorMap.get('Local Foods Supply') || null;
-    const coffeeVendorId = vendorMap.get('Coffee Distribution KH') || null;
-
-    const defaultItems = [
-      [
-        '885000100001',
-        'ស្រាបៀរ អង្គរ 330ml',
-        'Anchor Beer 330ml',
-        'Beverages',
-        'Beer',
-        'Anchor',
-        'Can',
-        120,
-        24,
-        1.0,
-        0.65,
-        0.65,
-        bevVendorId,
-        JSON.stringify([
-          { name: 'Can', ratio: 1, retailPrice: 1.0 },
-          { name: 'Case', ratio: 24, retailPrice: 22.0 },
-        ]),
-      ],
-      [
-        '885000100002',
-        'ទឹកសុទ្ធ 500ml',
-        'Mineral Water 500ml',
-        'Beverages',
-        'Water',
-        'Kulara',
-        'Bottle',
-        240,
-        48,
-        0.5,
-        0.25,
-        0.25,
-        foodVendorId,
-        JSON.stringify([
-          { name: 'Bottle', ratio: 1, retailPrice: 0.5 },
-          { name: 'Case', ratio: 24, retailPrice: 10.0 },
-        ]),
-      ],
-      [
-        '885000100003',
-        'មីកញ្ចប់',
-        'Instant Noodles',
-        'Food',
-        'Grocery',
-        'Mama',
-        'Pack',
-        18,
-        24,
-        0.75,
-        0.42,
-        0.42,
-        foodVendorId,
-        JSON.stringify([
-          { name: 'Pack', ratio: 1, retailPrice: 0.75 },
-          { name: 'Box', ratio: 30, retailPrice: 20.0 },
-        ]),
-      ],
-      [
-        '885000100004',
-        'កាហ្វេកំប៉ុង',
-        'Canned Coffee',
-        'Beverages',
-        'Coffee',
-        'Wonda',
-        'Can',
-        0,
-        20,
-        1.25,
-        0.8,
-        0.8,
-        coffeeVendorId,
-        JSON.stringify([{ name: 'Can', ratio: 1, retailPrice: 1.25 }]),
-      ],
-    ];
-
-    const insertItemQuery = `
-      INSERT INTO items 
-      (barcode, name_kh, name_en, department, category, brand, base_unit, qty_on_hand, reorder_qty, retail_price, purchase_cost, average_cost, vendor_id, units, company_id) 
-      VALUES ?
-    `;
-
-    // Bulk insert using nested array syntax supported by mysql2
-    await pool.query(insertItemQuery, [defaultItems.map((item) => [...item, startupTenantCompanyId])]);
-  }
-
   const [companySettingsRows] = await pool.query("SELECT setting_value FROM settings WHERE setting_key = 'company'");
   const companySettings = companySettingsRows[0]
     ? (typeof companySettingsRows[0].setting_value === 'string'
@@ -1024,4 +949,11 @@ async function initializeDatabaseSchema() {
   startupTenantCompanyId = null;
 }
 
-module.exports = { ensureUniqueUserEmailIndex, ensureUserReferenceSetNull, migrateQuantitiesToIntegers, pool, initializeDatabase };
+module.exports = {
+  ensureUniqueUserEmailIndex,
+  ensureUserReferenceSetNull,
+  migrateQuantitiesToIntegers,
+  migrateUserRoleModel,
+  pool,
+  initializeDatabase,
+};

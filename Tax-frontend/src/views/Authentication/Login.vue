@@ -40,10 +40,7 @@
 
           <!-- Aside Footer -->
           <div class="aside-footer">
-            <div class="metric-chip">
-              <i class="bi bi-shield-check"></i>
-              <span>{{ text('ISO 27001 &amp; SOC2 Type II Certified', 'ទទួលបានវិញ្ញាបនបត្រ ISO 27001 និង SOC2 Type II') }}</span>
-            </div>
+           
             <p class="copyright">&copy; {{ currentYear }} Axis Platform Inc. {{ text('All rights reserved.', 'រក្សាសិទ្ធិគ្រប់យ៉ាង។') }}</p>
           </div>
         </div>

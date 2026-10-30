@@ -90,6 +90,18 @@
           />
         </div>
 
+        <div class="col-md-4">
+          <label class="form-label fw-semibold small text-secondary">
+            {{ language.isKhmer ? 'មុខតំណែង' : 'Position' }}
+          </label>
+          <input
+            v-model.trim="userForm.position"
+            class="form-control form-control-md"
+            :placeholder="language.isKhmer ? 'ឧ. អ្នកគិតលុយ' : 'e.g. Cashier'"
+            maxlength="160"
+          />
+        </div>
+
         <div class="col-md-3">
           <label class="form-label fw-semibold small text-secondary">
             {{ language.isKhmer ? 'ឈ្មោះគណនី (Username)' : 'Username' }} <span class="text-danger">*</span>
@@ -235,6 +247,7 @@
                   </div>
                   <div>
                     <div class="fw-semibold text-dark mb-0">{{ user.name }}</div>
+                    <small v-if="user.position" class="text-muted">{{ user.position }}</small>
                     <small v-if="isCurrentUser(user)" class="text-primary fw-medium extra-small">
                       <i class="bi bi-person-badge me-1"></i>{{ language.isKhmer ? '(គណនីរបស់អ្នក)' : '(You)' }}
                     </small>
@@ -344,6 +357,7 @@ const editingUserId = ref(null);
 
 const userForm = reactive({
   name: '',
+  position: '',
   username: '',
   email: '',
   password: '',
@@ -417,6 +431,7 @@ function openCreateModal() {
   editingUserId.value = null;
   Object.assign(userForm, {
     name: '',
+    position: '',
     username: '',
     email: '',
     password: '',
@@ -435,6 +450,7 @@ async function openEditModal(user) {
   const permissions = normalizeUserPermissions(user.permissions);
   Object.assign(userForm, {
     name: user.name,
+    position: user.position || '',
     username: user.username,
     email: user.email || '',
     password: '',
@@ -472,6 +488,7 @@ async function saveUser() {
     if (isEditing.value) {
       const payload = {
         name: userForm.name,
+        position: userForm.position,
         email: userForm.email,
         role: 'staff',
         preset: userForm.preset,

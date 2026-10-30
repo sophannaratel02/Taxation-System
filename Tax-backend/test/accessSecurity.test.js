@@ -134,6 +134,7 @@ test('new accounts created through the users API are always assigned the staff r
       {
         body: {
           name: 'New User',
+          position: 'Cashier',
           username: 'new-user',
           email: 'new-user@example.test',
           password: 'secure-password',
@@ -149,8 +150,10 @@ test('new accounts created through the users API are always assigned the staff r
     assert.equal(forwardedError, undefined);
     assert.equal(res.statusCode, 201);
     assert.equal(res.body.role, 'staff');
+    assert.equal(res.body.position, 'Cashier');
     const insert = statements.find(({ sql }) => sql.startsWith('INSERT INTO users'));
     assert.equal(insert.params[4], 'staff');
+    assert.equal(insert.params[8], 'Cashier');
     assert.equal(statements.some(({ sql }) => sql.includes('INSERT INTO activity_logs')), true);
   } finally {
     pool.getConnection = originalGetConnection;

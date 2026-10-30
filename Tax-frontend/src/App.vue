@@ -138,9 +138,7 @@
                 <span class="user-name text-truncate" style="max-width: 140px;">
                     {{ currentUser?.name || language.t('staffMember') }}
                 </span>
-                <!-- <span class="user-role">
-                  {{ isSuperAdmin ? 'Super Admin' : displayAsStandardUser ? language.t('user') : isAdmin ? language.t('administrator') : language.t('user') }}
-                </span> -->
+                <span class="user-role">{{ profileRoleLabel }}</span>
               </div>
 
               <i class="bi bi-chevron-down toggle-arrow" :class="{ 'rotate-180': profileOpen }"></i>
@@ -154,7 +152,7 @@
                   <small class="text-muted d-block">
                     {{ language.t('signedInAs') }} 
                     <span class="text-primary fw-semibold">
-                      {{ isSuperAdmin ? 'Super Admin' : displayAsStandardUser ? language.t('user') : isAdmin ? language.t('administrator') : language.t('user') }}
+                      {{ profileRoleLabel }}
                     </span>
                   </small>
                 </li>
@@ -355,6 +353,31 @@ const isAdmin = computed(() => String(currentUser.value?.role || '').toLowerCase
 const isCompanyOwner = computed(() => String(currentUser.value?.role || '').toLowerCase() === 'owner');
 const displayAsStandardUser = computed(() => String(currentUser.value?.role || '').toLowerCase() === 'staff');
 const hasAdminAccess = computed(() => isCompanyOwner.value);
+const profileRoleLabel = computed(() => {
+  if (isSuperAdmin.value) return 'Super Admin';
+  if (isCompanyOwner.value) return language.t('administrator');
+  if (!displayAsStandardUser.value) return language.t('user');
+
+  let permissions = currentUser.value?.permissions;
+  if (typeof permissions === 'string') {
+    try {
+      permissions = JSON.parse(permissions);
+    } catch {
+      permissions = null;
+    }
+  }
+  const preset = Array.isArray(permissions)
+    ? 'custom'
+    : permissions?.preset || permissions?.role || 'cashier';
+  const labels = {
+    manager: language.isKhmer ? 'អ្នកគ្រប់គ្រងប្រតិបត្តិការ' : 'Manager',
+    cashier: language.isKhmer ? 'អ្នកគិតលុយ' : 'Cashier',
+    inventory: language.isKhmer ? 'ស្តុក' : 'Inventory',
+    accountant: language.isKhmer ? 'គណនេយ្យ' : 'Accountant',
+    custom: language.isKhmer ? 'កំណត់ផ្ទាល់ខ្លួន' : 'Custom',
+  };
+  return labels[preset] || `${preset.charAt(0).toUpperCase()}${preset.slice(1)}`;
+});
 
 const baseMenuSections = computed(() => [
   {
