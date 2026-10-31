@@ -184,8 +184,8 @@ The API generates a random six-digit OTP, stores only its bcrypt hash, expires i
 
 ## 3. Frontend API URL
 
-The frontend defaults to `http://localhost:4000/api`. To change it, create `Tax-frontend/.env`:
+The frontend defaults to `http://159.223.34.157:4000/api`. To change it, create `Tax-frontend/.env`:
 
 ```env
-VITE_API_URL=http://localhost:4000/api
+VITE_API_URL=http://159.223.34.157:4000/api
 ```

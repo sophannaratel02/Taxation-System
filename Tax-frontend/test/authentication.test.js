@@ -28,8 +28,8 @@ test('registration and login send email credentials without a username', async (
       { name: 'New Workspace Owner', email: 'owner@example.test', password: 'secure-password' },
       { email: 'owner@example.test', password: 'secure-password' },
     ]);
-    assert.equal(requests[0].url, '/api/auth/register');
-    assert.equal(requests[1].url, '/api/auth/login');
+    assert.equal(requests[0].url, 'http://159.223.34.157:4000/api/auth/register');
+    assert.equal(requests[1].url, 'http://159.223.34.157:4000/api/auth/login');
   } finally {
     globalThis.fetch = originalFetch;
   }

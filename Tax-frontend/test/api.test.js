@@ -91,7 +91,7 @@ test('company deletion sends the confirmed company name in a DELETE request', as
   const result = await api.deleteSuperAdminCompany(8, 'Example Workspace');
 
   assert.deepEqual(result, { ok: true, deleted: true });
-  assert.equal(request.url, '/api/superadmin/companies/8');
+  assert.equal(request.url, 'http://159.223.34.157:4000/api/superadmin/companies/8');
   assert.equal(request.options.method, 'DELETE');
   assert.deepEqual(JSON.parse(request.options.body), { confirmName: 'Example Workspace' });
 });

@@ -43,10 +43,10 @@ The built files are output to `dist/` and should be served behind a web server w
 
 ## Environment configuration
 
-Create a `.env` file in `Tax-frontend` when the API is not hosted at the same origin:
+The frontend defaults to `http://159.223.34.157:4000/api`. Override it by creating a `.env` file in `Tax-frontend`:
 
 ```env
-VITE_API_URL=http://localhost:4000/api
+VITE_API_URL=http://159.223.34.157:4000/api
 ```
 
 ## Deployment notes
